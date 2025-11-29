@@ -10,20 +10,23 @@ Paris, France
 
 %% Select sessions
 % Form the list of sessions
-selection = 2;
+selection = 10;
 
-Dir{1} = PathForExperimentsReactActive({'Tvorozhok'}, 'head-fixed', 'none', '11_10');
-Dir{2} = PathForExperimentsReactActive({'Tvorozhok'}, 'head-fixed', 'none', '13_12');
-Dir{3} = PathForExperimentsReactActive({'Tvorozhok'}, 'head-fixed', 'none', 'all', 'perf_drop');
+Dir{2} = PathForExperimentsReactActive({'Tvorozhok'}, 'training', 'none', '11_10');
+Dir{3} = PathForExperimentsReactActive({'Tvorozhok'}, 'training', 'none', '13_12');
+% Dir{4} = PathForExperimentsReactActive({'Tvorozhok'}, 'training', 'none', 'all', 'perf_drop');
+Dir{5} = PathForExperimentsReactActive({'Tvorozhok'}, 'experiment', 'none', '14_15');
 
-% Dir{3} = PathForExperiments_React_Active_AG({'Kosichka'}, 'head-fixed', 'none');
-% Dir{4} = PathForExperiments_React_Active_AG({'Shropshire', 'Labneh', 'Brynza'}, 'head-fixed', 'none');
-Dir{5} = MergePathForExperiment(Dir{1},Dir{2});
-
-% Dirs_names = {'Tvorozhok', 'Kosichka', 'All animals', 'Arbitrary_Mix'};
+Dir{6} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', '11_10');
+Dir{7} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', '13_12');
+Dir{8} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', '14_15');
+Dir{9} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', '16_17');
+Dir{10} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', 'all');
+% Dir{1} = MergePathForExperiment(Dir{6},Dir{7},Dir{8},Dir{9});
 
 sessions = Dir{selection}.path';
 
+%% Select sessions with DLC
 k = 1;
 session_dlc = {};
 
@@ -43,7 +46,8 @@ session_dlc = session_dlc';
 
 
 %% PreProcessing: Sleep Scoring
-Ferret_ProcessData_BM
+% Ferret_ProcessData_BM % Original version
+Master_SleepScoring_preproc
 
 %% PreProcessing: Behaviour 
 React_Active_Behaviour_AG

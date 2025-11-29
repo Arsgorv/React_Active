@@ -56,10 +56,11 @@ data = {
                                                                                                
     
     % Mochi
-    'Mochi', 'training', 'none', '11_10', 'Z:\Arsenii\React_Active\training\Mochi\' {'20251031_m', '20251031_n', '20251103_m', '20251103_n', '20251104_m', '20251106_m','20251106_n', '20251107_m', '20251107_n_1', '20251107_n_2'};
-    'Mochi', 'training', 'none', '13_12', 'Z:\Arsenii\React_Active\training\Mochi\' {'20251111_n', '20251112_m','20251112_n', '20251113_m', '20251113_n', '20251114_m', '20251114_n', '20251115_m', '20251117_m', '20251117_n', '20251118_m', '20251118_n'};
-    'Mochi', 'training', 'none', '14_15', 'Z:\Arsenii\React_Active\training\Mochi\' {'20251119_m', '20251119_n', '20251120_m','20251120_n', '20251124_m', '20251125_m', '20251125_n', '20251126_m', '20251126_n'};
-    'Mochi', 'training', 'none', '16_17', 'Z:\Arsenii\React_Active\training\Mochi\' {'20251127_m', '20251128_n'};
+    % no ephys: '20251106_m'
+    'Mochi', 'training', 'none', '11_10', 'Z:\Arsenii\React_Active\training\Mochi\' {'20251031_m', '20251031_n', '20251103_m', '20251103_n', '20251104_m', '20251106_n', '20251107_m', '20251107_n_1', '20251107_n_2'};
+    'Mochi', 'training', 'none', '13_12', 'Z:\Arsenii\React_Active\training\Mochi\' {'20251111_n', '20251112_m','20251112_n_1','20251112_n_2', '20251113_m', '20251113_n', '20251114_m', '20251114_n', '20251115_m', '20251117_m', '20251117_n', '20251118_m', '20251118_n'};
+    'Mochi', 'training', 'none', '14_15', 'Z:\Arsenii\React_Active\training\Mochi\' {'20251119_m', '20251119_n', '20251120_m','20251120_n', '20251124_n','20251125_m', '20251125_n', '20251126_m', '20251126_n'};
+    'Mochi', 'training', 'none', '16_17', 'Z:\Arsenii\React_Active\training\Mochi\' {'20251127_n', '20251128_n'};
     };
 
 % Filter sessions based on inputs
@@ -77,7 +78,7 @@ for i = 1:size(data, 1)
             Dir.name{end+1} = session_name;
             
             % Load ExpeInfo if available
-            expe_info_path = fullfile(session_path, 'ExpeInfo.mat');
+            expe_info_path = fullfile(session_path, 'ephys', 'ExpeInfo.mat');
             if exist(expe_info_path, 'file')
                 load(expe_info_path, 'ExpeInfo');
                 Dir.ExpeInfo{end+1} = ExpeInfo; 

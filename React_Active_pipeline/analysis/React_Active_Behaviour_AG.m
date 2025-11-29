@@ -8,14 +8,6 @@ function React_Active_Behaviour_AG()
 % Under construction  - Producing the composition video with all variables synced (composition_video_OB_DLC_ferret)
 
 %% -------------------------------------- PREPROCESSING -------------------------------------- 
-% quick version of sleep scoring, where I only calculate smooth brain powers
-for sess = 1:numel(session_dlc)
-    disp('Calculating brain power...')
-    disp([num2str(length(session_dlc)-sess + 1) '/' num2str(length(session_dlc)) ' left'])
-    disp(['Running session: ' session_dlc{sess}])    
-    calc_brain_gamma_powers(session_dlc{sess})
-end
-
 % SESS: Synchronize LFP and DLC ; Produces synced timeline in DLC_data.mat
 for sess = 1:length(session_dlc)
     disp(['Running session: ' session_dlc{sess}])
