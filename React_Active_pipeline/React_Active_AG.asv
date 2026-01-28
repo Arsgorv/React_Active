@@ -9,10 +9,8 @@ Paris, France
 %}
 
 %% Select sessions
-project = 'RA'; % 'RP' 'Tonotopy'
-
 % Form the list of sessions
-selection = 6;
+selection = 11;
 
 Dir{2} = PathForExperimentsReactActive({'Tvorozhok'}, 'training', 'none', '11_10');
 Dir{3} = PathForExperimentsReactActive({'Tvorozhok'}, 'training', 'none', '13_12');
@@ -53,19 +51,17 @@ copy_dlc_related_files(to_dir, from_dir)
 Master_DLC_preproc(sessions, opts)
 
 %% PreProcessing: align all datastreams -> extract trial information -> reconstruct missed triggers -> make Epochs
-Master_data_sync_preproc(sessions, true, project)
+Master_data_sync_preproc(sessions, true, 'RA')
 
 % Check data sync
 for sess = 1:numel(sessions)
     datapath = sessions{sess};
     disp('------------------------------------------')
     disp(['Working on ' datapath])
-    if contains(project, 'RA')
-        QC = RA_sanity_check_datasync_active(datapath);
-    elseif contains(project, 'RP')
-        QC = RP_sanity_check_datasync_passive(datapath);
-    end
-end
+if contains(project, 'RA')
+QC = RA_sanity_check_datasync_active(datapath);
+contains(project, 'RA')
+QC = RP_sanity_check_datasync_passive(datapath);
 
 %% PreProcessing: FMA spikesorting
 Master_FMA_preproc

@@ -54,13 +54,21 @@ data = {
                                                                                                '20250822_m', '20250822_n'};
     'Tvorozhok', 'experiment', 'none', '14_15', 'Z:\Arsenii\React_Active\React_Active_AG\Tvorozhok\' {'20250919', '20250925', '20250929', '20250930', '20251001', '20251002', '20251003'};
                                                                                                
-    
+    % Kosichka
+    'Kosichka', 'training', 'none', '11_10', 'Z:\Arsenii\React_Active\training\Kosichka\' {'20250711', '20250712', '20250716', '20250718_n', '20250721_m', '20250722_m', '20250722_n', '20250723_m', '20250724_m', '20250725_m', '20250725_n', '20250728_m', '20250724_m', '20250728_n', '20250729_m', '20250730_m', '20250807_m', '20250813_m', '20250814_m', '20250815_m', '20250815_n', '20250816_m', '20250820_m'};
+
+    % Brayon
+    'Brayon', 'training', 'none', '11_10', 'Z:\Arsenii\React_Active\training\Brayon\' {'20251027_m', '20251027_n', '20251028_m', '20251028_n', '20251029_m', '20251029_n', '20251030_m', '20251030_n', '20251031_m', '20251031_n', '20251103_m', '20251103_n', '20251104_m', '20251107_m', '20250729_m', '20251112_n', '20251113_n', '20251114_m', '20251114_n', '20251118_m'};
+    'Brayon', 'training', 'diazepam', '11_10', 'Z:\Arsenii\React_Active\training\Brayon\' {'20251113_m_diazepam', '20251114_diazepam', '20251118_diazepam', '20251119_diazepam'}; 
+    'Brayon', 'FM', 'none', 'none', 'Z:\Arsenii\React_Active\training\Brayon\' {'20251103_m'};
+
     % Mochi
     % no ephys: '20251106_m'
     'Mochi', 'training', 'none', '11_10', 'Z:\Arsenii\React_Active\training\Mochi\' {'20251031_m', '20251031_n', '20251103_m', '20251103_n', '20251104_m', '20251106_n', '20251107_m', '20251107_n_1', '20251107_n_2'};
     'Mochi', 'training', 'none', '13_12', 'Z:\Arsenii\React_Active\training\Mochi\' {'20251111_n', '20251112_m','20251112_n_1','20251112_n_2', '20251113_m', '20251113_n', '20251114_m', '20251114_n', '20251115_m', '20251117_m', '20251117_n', '20251118_m', '20251118_n'};
     'Mochi', 'training', 'none', '14_15', 'Z:\Arsenii\React_Active\training\Mochi\' {'20251119_m', '20251119_n', '20251120_m','20251120_n', '20251124_n','20251125_m', '20251125_n', '20251126_m', '20251126_n'};
-    'Mochi', 'training', 'none', '16_17', 'Z:\Arsenii\React_Active\training\Mochi\' {'20251127_n', '20251128_n'};
+    'Mochi', 'training', 'none', '16_17', 'Z:\Arsenii\React_Active\training\Mochi\' {'20251127_n', '20251128_n', '20251202_m', '20251202_n', '20251204_m', '20251204_n', '20251209_m', '20251209_n', '20251210_m', '20251210_n', '20251211_m', '20251211_n', '20251212_n'};
+    'Mochi', 'training', 'none', '18_19', 'Z:\Arsenii\React_Active\training\Mochi\' {'20251216_m', '20251216_n', '20251217_n', '20251218_n', '20251219_m', '20251222_m'};
     };
 
 % Filter sessions based on inputs

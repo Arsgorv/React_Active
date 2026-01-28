@@ -1,60 +1,30 @@
-function React_Active_Behaviour_AG()
+function React_Active_Behaviour_AG(session_dlc, opts)
 % This is a master script to process the DLC behavioural ferret data for
 % ReactActive project
 % Steps:
-%   - Synchronization with LFP signal (sync_behaviour_ephys). It creates a correct timeline taking into account the delay between the video and ephys
 %   - Generation of the basic figures (behaviour_analysis)
 % Under construction  - Study the correlation between OB/Cortical/Hippocampal gamma and pupil area (gamma_pupil_corr)
 % Under construction  - Producing the composition video with all variables synced (composition_video_OB_DLC_ferret)
 
-%% -------------------------------------- PREPROCESSING -------------------------------------- 
-% SESS: Synchronize LFP and DLC ; Produces synced timeline in DLC_data.mat
-for sess = 1:length(session_dlc)
-    disp(['Running session: ' session_dlc{sess}])
-    disp([num2str(length(session_dlc)-sess + 1) '/' num2str(length(session_dlc)) ' left'])
-    disp('Syncing DLC and Ephys...')
-    sync_behaviour_ephys(session_dlc{sess})
+if nargin < 2, opts = struct(); end
+if ~isfield(opts,'smoothing_win'), opts.smoothing_win = 0; end
+
+%% optional exclusion upfront
+remove = {
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250712'
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250716_n'
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250718_n'
+};
+session_dlc = session_dlc(~ismember(session_dlc, remove));
+
+%% SESS: per-trial behavioural analysis
+for sess = 1:numel(session_dlc)
+    datapath = session_dlc{sess};
+    disp(['[behav_analysis] ' datapath])
+    behaviour_analysis(datapath, opts.smoothing_win, 'TrialSet', 'all');
 end
 
-% SESS: Do the basic DLC pre-processing
-for sess = 1:length(session_dlc)
-    disp('Analysing DLC data...')
-    disp([num2str(length(session_dlc)-sess + 1) '/' num2str(length(session_dlc)) ' left'])
-    disp(['Running session: ' session_dlc{sess}])
-    behaviour_preprocessing(session_dlc{sess})
-end
-
-% SESS: Check the quality of tracking on a short episode
-% range = [8 50];
-% marker = {'pupil_area_007', 'cheek_center_mvt', 'nostril_center_mvt', 'jaw_center_mvt', 'tongue_center_mvt', 'spout_likelihood', 'jaw_center'};
-% for sess = 1:length(session_dlc)
-%     disp(['Running session: ' session_dlc{sess}])
-%     disp([num2str(length(session_dlc)-sess + 1) '/' num2str(length(session_dlc)) ' left'])
-%     for m = 2:numel(marker)
-%         disp(['Running marker: ' marker{m}])
-%         disp([num2str(numel(marker)-m + 1) '/' num2str(numel(marker)) ' left'])
-%         tracking_check(session_dlc{sess}, marker{m}, range) %generates movie to verify the sync and accuracy of tracked markers and video
-%     end
-% end
-
-% SESS: Extract the behavioural data & Create trial epochs
-for sess = 1:length(session_dlc)
-    disp('Analysing Baphy data...')
-    disp([num2str(length(session_dlc)-sess + 1) '/' num2str(length(session_dlc)) ' left'])    
-    disp(['Running session: ' session_dlc{sess}])
-    baphy_preprocessing(session_dlc{sess})
-end
-
-%% --------------------------------------    ANALYSIS   -------------------------------------- 
-% SESS: per-trial behavioural analysis
-smoothing_win = 0;
-for sess = 1:length(session_dlc)
-    disp('Analysing behavioural data...')
-    disp([num2str(length(session_dlc)-sess + 1) '/' num2str(length(session_dlc)) ' left'])        
-    disp(['Running session: ' session_dlc{sess}])
-    behaviour_analysis(session_dlc{sess}, smoothing_win, 'TrialSet', 'all')
-end
-
+%%%%%%%%%%%%%%%%%%%%%%%%%
 %     makePupilSummaryVideo(session_dlc{sess} , smoothing_win)
 %     decoding_trial_identity(session_dlc{sess})
 
