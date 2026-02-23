@@ -12,11 +12,10 @@ Paris, France
 project = 'RA'; % 'RP' 'Tonotopy'
 
 % Form the list of sessions
-selection = 6;
+selection = 2;
 
 Dir{2} = PathForExperimentsReactActive({'Tvorozhok'}, 'training', 'none', '11_10');
 Dir{3} = PathForExperimentsReactActive({'Tvorozhok'}, 'training', 'none', '13_12');
-% Dir{4} = PathForExperimentsReactActive({'Tvorozhok'}, 'training', 'none', 'all', 'perf_drop');
 Dir{5} = PathForExperimentsReactActive({'Tvorozhok'}, 'experiment', 'none', '14_15');
 Dir{6} = PathForExperimentsReactActive({'Tvorozhok'}, 'training', 'none', 'all');
 
@@ -24,21 +23,74 @@ Dir{7} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', '11_10');
 Dir{8} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', '13_12');
 Dir{9} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', '14_15');
 Dir{10} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', '16_17');
-Dir{11} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', 'all');
-
-
+Dir{11} = PathForExperimentsReactActive({'Mochi', 'Tvorozhok'}, 'training', 'none', 'all');
+Dir{12} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', 'all');
+Dir{13} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', {'16_17', '18_19'});
+Dir{14} = PathForExperimentsReactActive({'Tvorozhok'}, 'experiment', 'none', 'all');
 
 sessions = Dir{selection}.path';
 
 % sessions with DLC
 session_dlc = filter_sessions_with_dlc(sessions);
 
-% opts
+%% Fixing sessions: Mochi
+% remove sessions
+remove_sess = {...
+        'Z:\Arsenii\React_Active\training\Mochi\20251106_m',... % remove completely: no camera , no OB
+        'Z:\Arsenii\React_Active\training\Mochi\20251112_m',... % remove completely: very small number of trialss
+        'Z:\Arsenii\React_Active\training\Mochi\20251118_m',... % remove completely: short/no behav
+        'Z:\Arsenii\React_Active\training\Mochi\20251118_n',... % remove completely: short/no behav
+        'Z:\Arsenii\React_Active\training\Mochi\20251222_m',... % remove completely: no OB, no behaviour
+        'Z:\Arsenii\React_Active\training\Mochi\20251104_m',... % fix? spout
+        'Z:\Arsenii\React_Active\training\Mochi\20251111_n',... % fix? spout
+        'Z:\Arsenii\React_Active\training\Mochi\20251211_n',... % consider separately? 
+        'Z:\Arsenii\React_Active\training\Mochi\20251031_n',... % TEMPORARY REMOVE ; Weird OB for ob_events 
+        'Z:\Arsenii\React_Active\training\Mochi\20251104_m',... % TEMPORARY REMOVE ; Weird OB for ob_events 
+        'Z:\Arsenii\React_Active\training\Mochi\20251117_n',... % TEMPORARY REMOVE ; Weird OB for ob_events 
+        'Z:\Arsenii\React_Active\training\Mochi\20251128_n',... % TEMPORARY REMOVE ; Weird OB for ob_events 
+        'Z:\Arsenii\React_Active\training\Mochi\20251209_n',... % TEMPORARY REMOVE ; Weird OB for ob_events 
+        'Z:\Arsenii\React_Active\training\Mochi\20251219_m',... % TEMPORARY REMOVE ; Weird OB for ob_events 
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250723_m',... % fix? spout
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250731_m',...% fix? spout + face/eye mismatch
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250801_m',...% fix? spout + eye mismatch
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250818_n',...% fix? spout + face mismatch. Although it looks fine, spout is indeed misdetected
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250808_n',... % TEMPORARY REMOVE ; Weird OB for ob_events
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250813_n',... % TEMPORARY REMOVE ; Weird OB for ob_events
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250814_m',... % TEMPORARY REMOVE ; Weird OB for ob_events
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250814_n',... % TEMPORARY REMOVE ; Weird OB for ob_events
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250815_m',... % TEMPORARY REMOVE ; Weird OB for ob_events
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250815_n',... % TEMPORARY REMOVE ; Weird OB for ob_events
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250816_m',... % TEMPORARY REMOVE ; Weird OB for ob_events
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250818_m',... % TEMPORARY REMOVE ; Weird OB for ob_events
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250818_n',... % TEMPORARY REMOVE ; Weird OB for ob_events
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250820_m',... % TEMPORARY REMOVE ; Weird OB for ob_events
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250820_n',... % TEMPORARY REMOVE ; Weird OB for ob_events
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250821_m',... % TEMPORARY REMOVE ; Weird OB for ob_events
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250821_n',... % TEMPORARY REMOVE ; Weird OB for ob_events
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250822_m',... % TEMPORARY REMOVE ; Weird OB for ob_events
+        'Z:\Arsenii\React_Active\training\Tvorozhok\20250822_n',... % TEMPORARY REMOVE ; Weird OB for ob_events
+};
+
+%%  Fixing sessions: Tvorozhok
+%     'Z:\Arsenii\React_Active\training\Tvorozhok\20250712',... % it looks alright, but let's see later
+%     'Z:\Arsenii\React_Active\training\Tvorozhok\20250716_n',... % it looks alright, but let's see later
+%     'Z:\Arsenii\React_Active\training\Tvorozhok\20250718_n',... % face mismatch. I see no problems with processing, but keep an eye
+
+%%
+session_dlc = session_dlc((~ismember(session_dlc, remove_sess)));
+
+keepIdx = ~ismember(sessions, remove_sess);
+sessions = sessions(keepIdx);
+
+%% opts
 opts = struct();
 opts.do_sync = true;
 opts.do_basic_preproc = true;
 opts.do_motion_energy = false;
-opts.smoothing_win = 0;
+opts.smoothing_win = 1;
+
+opts.do_physio_preproc = 1;
+opts.do_ob_event_analysis = 1;
 
 %% PreProcessing: Sleep Scoring
 % Ferret_ProcessData_BM % Original version
@@ -46,9 +98,17 @@ Master_SleepScoring_preproc(sessions)
 
 %% PreProcessing: Behaviour 
 % Move DLC videos 
-to_dir = 'Z:\Arsenii\React_Active\experiment\Tvorozhok'; 
+to_dir = 'Z:\Arsenii\React_Passive_ephys\Processed_data\Kiri'; 
 from_dir = 'E:\DLC';
 copy_dlc_related_files(to_dir, from_dir)
+
+% check if you have '_filtered.csv' everywhere
+for sess = 1:numel(sessions)
+    datapath = sessions{sess};
+    disp('------------------------------------------')
+    disp(['Working on ' datapath])
+    missing = check_missing_DLC_filtered_csv(datapath);
+end
 
 Master_DLC_preproc(sessions, opts)
 

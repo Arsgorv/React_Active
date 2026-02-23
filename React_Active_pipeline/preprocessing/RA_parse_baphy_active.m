@@ -134,68 +134,100 @@ if ~exist('exptevents','var') || ~exist('exptparams','var')
 end
 
 %% ---------------- canonical nTrials ----------------
-nTrials = double(TB.n_trials);
-if ~isfinite(nTrials) || nTrials<=0
-    error('Invalid trigBaphy.n_trials: %s', mat2str(TB.n_trials));
+% nTrials = double(TB.n_trials);
+% if ~isfinite(nTrials) || nTrials<=0
+%     error('Invalid trigBaphy.n_trials: %s', mat2str(TB.n_trials));
+% end
+% trial_id = (1:nTrials)';
+% abs_trialstart_s = nan(nTrials,1);
+% abs_trialend_s   = nan(nTrials,1);
+% 
+% % Prefer t_raw_s if it matches nTrials (common in your trigOE struct)
+% if isfield(TB,'t_raw_s') && ~isempty(TB.t_raw_s)
+%     t0 = TB.t_raw_s(:);
+%     if numel(t0) >= nTrials
+%         abs_trialstart_s = t0(1:nTrials);
+%     end
+% end
+% 
+% % Fallback: trial_start_ts (ticks) -> seconds
+% if ~any(isfinite(abs_trialstart_s)) && isfield(TB,'trial_start_ts') && ~isempty(TB.trial_start_ts)
+%     t0_ts  = TB.trial_start_ts(:);
+%     if numel(t0_ts ) >= nTrials
+%         abs_trialstart_s = t0_ts(1:nTrials) ./ TsRate;
+%     end
+% end
+% 
+% % Extra fallback: t_raw_ts (ticks) -> seconds
+% if ~any(isfinite(abs_trialstart_s)) && isfield(TB,'t_raw_ts') && ~isempty(TB.t_raw_ts)
+%     t0_ts = TB.t_raw_ts(:);
+%     if numel(t0_ts) >= nTrials
+%         abs_trialstart_s = t0_ts(1:nTrials) ./ TsRate;
+%     end
+% end
+% 
+% if ~any(isfinite(abs_trialstart_s))
+%     error('Could not obtain abs trial starts from trigBaphy (expected t_raw_s or trial_start_ts).');
+% end
+% 
+% % Trial ends: if provided, use them ONLY if they are not identical to starts
+% if isfield(TB,'trial_stop_s') && ~isempty(TB.trial_stop_s)
+%     t1 = TB.trial_stop_s(:);
+%     if numel(t1) >= nTrials
+%         abs_trialend_s = t1(1:nTrials);
+%     end
+% end
+% 
+% if isfield(TB,'trial_stop_ts') && ~isempty(TB.trial_stop_ts)
+%     t1_ts = TB.trial_stop_ts(:);
+%     if numel(t1_ts) >= nTrials
+%         tmp_end_s = t1_ts(1:nTrials) ./ TsRate;
+% 
+%         % RA case: trial_stop_ts repeats trial_start_ts (one pulse per trial) -> ignore
+%         if all(isfinite(abs_trialstart_s)) && all(isfinite(tmp_end_s))
+%             if median(abs(tmp_end_s - abs_trialstart_s)) < 1e-3
+%                 tmp_end_s(:) = NaN;
+%             end
+%         end
+% 
+%         if ~any(isfinite(abs_trialend_s))
+%             abs_trialend_s = tmp_end_s;
+%         end
+%     end
+% end
+
+trAll = [exptevents.Trial];
+trAll = trAll(trAll > 0 & isfinite(trAll));
+if isempty(trAll)
+    error('exptevents.Trial is empty/invalid; cannot define number of trials.');
 end
+nTrials = double(max(trAll));   % ground truth
 trial_id = (1:nTrials)';
+
+% optional: log mismatch vs TTL
+nTrialsTTL = NaN;
+if isfield(trigBaphy,'baphy') && isfield(trigBaphy.baphy,'n_trials') && ~isempty(trigBaphy.baphy.n_trials)
+    nTrialsTTL = double(trigBaphy.baphy.n_trials);
+end
+if isfinite(nTrialsTTL) && nTrialsTTL ~= nTrials
+    warning('Trial count mismatch: exptevents=%d, trigBaphyTTL=%d. Restricting to exptevents.', nTrials, nTrialsTTL);
+end
+
 abs_trialstart_s = nan(nTrials,1);
 abs_trialend_s   = nan(nTrials,1);
 
-% Prefer t_raw_s if it matches nTrials (common in your trigOE struct)
-if isfield(TB,'t_raw_s') && ~isempty(TB.t_raw_s)
-    t0 = TB.t_raw_s(:);
-    if numel(t0) >= nTrials
-        abs_trialstart_s = t0(1:nTrials);
-    end
+% Prefer t_raw_s, else trial_start_ts (ticks->s)
+t0 = [];
+if isfield(trigBaphy.baphy,'t_raw_s') && ~isempty(trigBaphy.baphy.t_raw_s)
+    t0 = trigBaphy.baphy.t_raw_s(:);
+elseif isfield(trigBaphy.baphy,'trial_start_ts') && ~isempty(trigBaphy.baphy.trial_start_ts)
+    t0 = trigBaphy.baphy.trial_start_ts(:) ./ 1e4;
 end
 
-% Fallback: trial_start_ts (ticks) -> seconds
-if ~any(isfinite(abs_trialstart_s)) && isfield(TB,'trial_start_ts') && ~isempty(TB.trial_start_ts)
-    t0_ts  = TB.trial_start_ts(:);
-    if numel(t0_ts ) >= nTrials
-        abs_trialstart_s = t0_ts(1:nTrials) ./ TsRate;
-    end
+if ~isempty(t0)
+    useN = min(numel(t0), nTrials);
+    abs_trialstart_s(1:useN) = t0(1:useN);
 end
-
-% Extra fallback: t_raw_ts (ticks) -> seconds
-if ~any(isfinite(abs_trialstart_s)) && isfield(TB,'t_raw_ts') && ~isempty(TB.t_raw_ts)
-    t0_ts = TB.t_raw_ts(:);
-    if numel(t0_ts) >= nTrials
-        abs_trialstart_s = t0_ts(1:nTrials) ./ TsRate;
-    end
-end
-
-if ~any(isfinite(abs_trialstart_s))
-    error('Could not obtain abs trial starts from trigBaphy (expected t_raw_s or trial_start_ts).');
-end
-
-% Trial ends: if provided, use them ONLY if they are not identical to starts
-if isfield(TB,'trial_stop_s') && ~isempty(TB.trial_stop_s)
-    t1 = TB.trial_stop_s(:);
-    if numel(t1) >= nTrials
-        abs_trialend_s = t1(1:nTrials);
-    end
-end
-
-if isfield(TB,'trial_stop_ts') && ~isempty(TB.trial_stop_ts)
-    t1_ts = TB.trial_stop_ts(:);
-    if numel(t1_ts) >= nTrials
-        tmp_end_s = t1_ts(1:nTrials) ./ TsRate;
-
-        % RA case: trial_stop_ts repeats trial_start_ts (one pulse per trial) -> ignore
-        if all(isfinite(abs_trialstart_s)) && all(isfinite(tmp_end_s))
-            if median(abs(tmp_end_s - abs_trialstart_s)) < 1e-3
-                tmp_end_s(:) = NaN;
-            end
-        end
-
-        if ~any(isfinite(abs_trialend_s))
-            abs_trialend_s = tmp_end_s;
-        end
-    end
-end
-
 
 %% ---------------- parse exptevents (REL times, trial clock) ----------------
 trial_type = repmat({'Unknown'}, nTrials, 1);
@@ -526,9 +558,38 @@ if AddSpoutArrival
         S = load(dlcfile, 'spout_likelihood');
         if isfield(S,'spout_likelihood') && ~isempty(S.spout_likelihood)
             spout_likelihood = S.spout_likelihood;
-
+            
             temp = zscore(runmean(Data(spout_likelihood), 20));
-            spout = tsd(Range(spout_likelihood), temp);
+            t_sp = Range(spout_likelihood);
+            t_sp = t_sp(:);
+                        
+            % Heuristic: if times are small (<1e6) they are probably SECONDS, convert to ticks
+            if max(t_sp) < 1e6
+                t_sp_ts = t_sp * 1e4;
+            else
+                t_sp_ts = t_sp;  % already ticks
+            end
+            %spout = tsd(Range(spout_likelihood), temp);
+            
+            if isfield(trigBaphy,'face_cam') && isfield(trigBaphy.face_cam,'t_raw_ts') && ~isempty(trigBaphy.face_cam.t_raw_ts)
+                o = trigBaphy.face_cam.t_raw_ts(:);
+                
+                % If DLC time vector length matches number of frames/TTLs, index pairing works
+                m = min(numel(t_sp_ts), numel(o));
+                x = double(t_sp_ts(1:m));
+                y = double(o(1:m));
+                
+                % ensure unique x for interp/fit (important for dropped/duplicated frames)
+                [x, iu] = unique(x, 'stable');
+                y = y(iu);
+                
+                if numel(x) >= 2
+                    p = polyfit(x, y, 1);
+                    t_sp_ts = polyval(p, double(t_sp_ts));
+                end
+            end
+            
+            spout = tsd(t_sp_ts, temp);
             
             ivRaw = thresholdIntervals(spout, SpoutThr, 'Direction', 'Above');
             ivClean = mergeCloseIntervals(ivRaw, SpoutMergeGap);
@@ -547,6 +608,14 @@ if AddSpoutArrival
                 if ~isempty(cand)
                     spout_arrival_abs_s(tr) = cand(1);
                     spout_arrival_rel_s(tr) = cand(1) - abs_trialstart_s(tr);
+                end
+            end
+            
+            ok = isfinite(spout_arrival_rel_s) & isfinite(rel_stim_start);
+            if nnz(ok) > 20
+                medArr = median(spout_arrival_rel_s(ok));
+                if medArr < 2 || medArr > 8
+                    warning('Spout arrival rel looks off (median=%.3fs). Likely spout clock is not mapped to OE/Baphy correctly.', medArr);
                 end
             end
 
@@ -706,7 +775,8 @@ end
 
 missing = find(~trial_seen);
 if ~isempty(missing)
-    warning('Trials with no TRIALSTART found in exptevents (1..nTrials): %s', mat2str(missing(1:min(20,end))'));
+    warning('exptevents defines nTrials=%d but TRIALSTART is missing for some trial ids: %s', ...
+        nTrials, mat2str(missing(1:min(20,end))'));
 end
 
 trAll = [exptevents.Trial];

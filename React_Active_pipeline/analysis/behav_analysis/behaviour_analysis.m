@@ -1,194 +1,134 @@
-function behaviour_analysis(datapath, smoothing_win, varargin)
-%{ 
-behaviour_analysis(datapath, smoothing_win, Name,Value,...)
-EXTRA NAME–VALUE PAIRS
-  'TrialSet'   – 'all' (default) | 'NoSound' | 'NoMotor'
-  'AntWin'     – struct with fields named exactly like marker variables.
-                 Each field = [tStart tEnd] in seconds relative to trial onset.
+function behaviour_analysis(datapath, opts)
+% behaviour_analysis (React_Active)
+% Per-session: metrics + PSTH figures for each marker for several windows and trial subsets.
+%
+% Figures:
+% For each bodypart/physio marker:
+%   windows: stimon_to_arrival, stimoff_to_arrival, arrival_m500_to_arrival
+%   trial subsets: regular, nosound, nomotor
+%   comparison: Target vs Reference (within subset)
+% Metrics: AshmanD, AUROC, CohensD, meanDiff
+% Plot: PSTH + hist + meanDiff + CohenD + ROC
 
-EXAMPLE
-  W.pupil_area_004 = [1.8 3.5];
-  behaviour_analysis(dp, 0.1, 'TrialSet','NoSound', 'AntWin',W)
+if nargin < 2, opts = struct(); end
+if ~isfield(opts,'fs_video'), opts.fs_video = 50; end
+if ~isfield(opts,'smoothing_win_s'), opts.smoothing_win_s = 0.50; end
+if ~isfield(opts,'baseline_pre_s'), opts.baseline_pre_s = 0.20; end
+if ~isfield(opts,'epoch_post_reward_s'), opts.epoch_post_reward_s = 2.0; end
+if ~isfield(opts,'min_trials_per_group'), opts.min_trials_per_group = 3; end
 
+fs = opts.fs_video;
 
- Summarise behavioural, video and e-phys markers, locked to trial onset.
- Extract each trial into a 0 s -> reward+2 s matrix
- Baseline-correct and (optionally) smooth each trace
- Plot grand means ± SEM and single-trial overlays
-%}
+% output folders ----------------
+outBase = fullfile(datapath,'analysis','behaviour');
+if ~exist(outBase,'dir'), mkdir(outBase); end
+[~,sessname] = fileparts(datapath);
 
-%% Initialization
-smootime=.006;
+%% Load Baphy
+Baphy = load_baphy(datapath);
 
-% Parse input
-p = inputParser;
-addParameter(p,'TrialSet','all',@(s) any(strcmpi(s,{'all','nosound','nomotor'})));
-% addParameter(p,'AntWin',struct(),@isstruct);
-parse(p,varargin{:});
-trialSet = lower(p.Results.TrialSet);
-% antWin = p.Results.AntWin;
+%% Load DLC
+D = load(fullfile(datapath,'video','DLC_data.mat'));
+time_video_s = ra_time_to_seconds(double(D.time_face(:))); % robust seconds
 
-% Load behaviour data
-load(fullfile(datapath, 'stim', 'trial_structure.mat'))
-load(fullfile(datapath, 'video', 'DLC_data.mat'))
-load(fullfile(datapath, 'behavResources.mat'), 'MovAcctsd')
-time_video = time_face/1e4;
+%% Load physio
+P = struct();
+physio_file = fullfile(datapath,'ephys','physio_for_behaviour.mat');
+if exist(physio_file,'file')
+    P = load(physio_file);
+end
 
-% Load ephys data
-load(fullfile(datapath, 'SleepScoring_OBGamma.mat'), 'BrainPower')
-load(fullfile(datapath, 'LFPData', 'LFP19.mat')); respiration_LFP = LFP;
-load(fullfile(datapath, 'LFPData', 'LFP6.mat')); EMG_LFP = LFP;
-SmoothGamma = BrainPower.Power{1};
+%% trial timing
+n = Baphy.n_trials;
+trial_start_abs_s = Baphy.trial.abs_trialstart_s(:);
+stim_on_abs_s     = Baphy.trial.abs_stim_start_s(:);
+stim_off_abs_s    = Baphy.trial.abs_stim_stop_s(:);
 
-%% Build trial masks %add it to baphy_preprocessing script
+arrival_abs_s = nan(n,1);
+if isfield(Baphy.trial,'spout_arrival_abs_s')
+    arrival_abs_s = Baphy.trial.spout_arrival_abs_s(:);
+end
 
-nTrials = numel(trial_structure.hit_rate.all);
-idxTarget = trial_id_struct.Target(:);
-idxReference = trial_id_struct.Reference(:);
-idxGood = trial_id_struct.goodTrials(:);
+stim_on_rel_s  = stim_on_abs_s  - trial_start_abs_s;
+stim_off_rel_s = stim_off_abs_s - trial_start_abs_s;
+arrival_rel_s  = arrival_abs_s  - trial_start_abs_s;
 
-idxNoSound = trial_id_struct.NoSound(:);
-nsType = trial_id_struct.NoSoundType;
+% --- Fix for NoMotor: arrival is undefined -> use median arrival across trials that have it
+arrival_imputed = ~isfinite(arrival_rel_s);
+arr_med_all = nanmedian(arrival_rel_s(~arrival_imputed));
+if isfinite(arr_med_all)
+    arrival_rel_s(arrival_imputed) = arr_med_all;
+end
 
-hasNoMotor = isfield(trial_id_struct,'NomotorExclusive');
-if hasNoMotor
-    idxNoMotor = trial_id_struct.NomotorExclusive(:);
-    nmType = trial_id_struct.NomotorExclusiveType;
+%% reward relative for epoch sizing
+reward_rel_s_pertrial = nan(n,1);
+if isfield(Baphy.trial,'abs_reward_s')
+    reward_rel_s_pertrial = Baphy.trial.abs_reward_s(:) - trial_start_abs_s;
+elseif isfield(Baphy.trial,'abs_target_s')
+    reward_rel_s_pertrial = Baphy.trial.abs_target_s(:) - trial_start_abs_s;
+end
+reward_rel_s = nanmedian(reward_rel_s_pertrial(isfinite(reward_rel_s_pertrial)));
+if ~isfinite(reward_rel_s)
+    reward_rel_s = nanmedian(stim_off_rel_s(isfinite(stim_off_rel_s))) + 2.0;
+end
+
+trial_dur_s = Baphy.trial.trial_dur_s;
+n_samples = round(trial_dur_s*fs)+1;
+tvec = (0:n_samples-1)/fs;
+baseline_samples = max(1, round(opts.baseline_pre_s*fs));
+smoothSamples = max(1, round(opts.smoothing_win_s*fs));
+
+%% define windows
+winNames = {'stimon_to_stimoff','stimon_to_arrival','stimoff_to_arrival','arrival_m500_to_arrival'};
+
+%% trial masks
+mskGood = false(n,1);
+if isfield(Baphy,'idx') && isfield(Baphy.idx,'goodTrials')
+    mskGood(Baphy.idx.goodTrials(:)) = true;
 else
-    idxNoMotor = []; nmType = {};
+    mskGood = isfinite(trial_start_abs_s);
 end
 
-% onsets in seconds
-tAll = nan(nTrials,1);
-tAll(idxReference) = Range(trial_structure.trial_onset.Reference,'s');
-tAll(idxTarget) = Range(trial_structure.trial_onset.Target,'s');
-tAll(idxNoSound) = Range(trial_structure.trial_onset.NoSound,'s');
-if hasNoMotor
-    tAll(idxNoMotor) = Range(trial_structure.trial_onset.NomotorExclusive,'s');
+mskTar = false(n,1); mskRef = false(n,1);
+if isfield(Baphy,'idx') && isfield(Baphy.idx,'Target')
+    mskTar(Baphy.idx.Target(:)) = true;
+    mskRef(Baphy.idx.Reference(:)) = true;
+elseif isfield(Baphy.trial,'type')
+    mskTar(strcmpi(Baphy.trial.type,'Target')) = true;
+    mskRef(strcmpi(Baphy.trial.type,'Reference')) = true;
 end
 
-% logical masks
-M = struct(); % container for all masks
-M.mskTarget = false(nTrials,1);  M.mskTarget(idxTarget) = true;
-M.mskRef = false(nTrials,1); M.mskRef(idxReference) = true;
-M.mskGood = false(nTrials,1); M.mskGood(idxGood) = true;
-
-M.mskNS = false(nTrials,1); M.mskNS(idxNoSound) = true;
-M.mskNS_T = false(nTrials,1);
-M.mskNS_R = false(nTrials,1);
-if ~isempty(idxNoSound)
-    M.mskNS_T(idxNoSound(strcmp(nsType,'Target'))) = true;
-    M.mskNS_R(idxNoSound(strcmp(nsType,'Reference'))) = true;
+mskNS = false(n,1);
+if isfield(Baphy,'idx') && isfield(Baphy.idx,'NoSound')
+    mskNS(Baphy.idx.NoSound(:)) = true;
+elseif isfield(Baphy.trial,'is_nosound')
+    mskNS = logical(Baphy.trial.is_nosound(:));
 end
 
-M.mskNM = false(nTrials,1);
-M.mskNM_T = false(nTrials,1);
-M.mskNM_R = false(nTrials,1);
-if hasNoMotor
-    M.mskNM(idxNoMotor) = true;
-    M.mskNM_T(idxNoMotor(strcmp(nmType,'Target'))) = true;
-    M.mskNM_R(idxNoMotor(strcmp(nmType,'Reference'))) = true;
+mskNM = false(n,1);
+if isfield(Baphy,'idx') && isfield(Baphy.idx,'NomotorExclusive')
+    mskNM(Baphy.idx.NomotorExclusive(:)) = true;
+elseif isfield(Baphy.trial,'is_nomotor')
+    mskNM = logical(Baphy.trial.is_nomotor(:));
 end
 
-M.mskReg = ~(M.mskNS | M.mskNM);
+mskReg = ~(mskNS | mskNM);
 
-switch trialSet
-    case 'nosound', keepMask = M.mskNS;
-    case 'nomotor', keepMask = M.mskNM;
-    otherwise,      keepMask = true(nTrials,1);
-end
-keepMask = keepMask & M.mskGood;
+%% subset struct (Target vs Ref within each)
+subsets = struct();
+subsets(1).name = 'regular';
+subsets(1).idxA = find(mskTar & mskGood & mskReg);
+subsets(1).idxB = find(mskRef & mskGood & mskReg);
 
-idxRef = find(M.mskRef & keepMask);
-idxTar = find(M.mskTarget & keepMask);
-ref_onsets = tAll(idxRef);
-tar_onsets = tAll(idxTar);
+subsets(2).name = 'nosound';
+subsets(2).idxA = find(mskTar & mskGood & mskNS);
+subsets(2).idxB = find(mskRef & mskGood & mskNS);
 
-%% Resample ephys data (REVIEW)
-ds2videoFS = @(sig) tsd(time_video*1e4, interp1(Range(sig,'s'), Data(sig), time_video, 'linear', 'extrap'));
+subsets(3).name = 'nomotor';
+subsets(3).idxA = find(mskTar & mskGood & mskNM);
+subsets(3).idxB = find(mskRef & mskGood & mskNM);
 
-% Process OB (resample); sampled at 1250Hz
-SmoothGamma_rs = ds2videoFS(SmoothGamma); 
-load(fullfile(datapath, 'LFPData', 'LFP12.mat')); OB_LFP = LFP;
-FilLFP_OB = FilterLFP(OB_LFP,[40 60],1024);
-Phase_OB=tsd(Range(FilLFP_OB) , angle(hilbert(zscore(Data(FilLFP_OB))))*180/pi+180);
-Phase_OB_rs = ds2videoFS(Phase_OB);
-
-% Phase_OB_Above_350=thresholdIntervals(Phase_OB,350,'Direction','Above');
-% OB_trig=ts((Stop(Phase_OB_Above_350)+Start(Phase_OB_Above_350))/2);
-% OB_trig_rs = ds2videoFS(OB_trig);
-
-%% Process EMG (filter, smooth, resample); sampled at 1250Hz
-FilLFP_EMG = FilterLFP(EMG_LFP,[50 300],1024);
-emgEnv = runmean(Data((FilLFP_EMG)).^2,ceil(smootime/median(diff(Range(FilLFP_EMG,'s')))));
-EMGData = tsd(Range(FilLFP_EMG),emgEnv);
-EMGData_rs = ds2videoFS(EMGData);
-EMGData_log10 = tsd(Range(FilLFP_EMG),log10(emgEnv));
-EMGData_log10_rs = ds2videoFS(EMGData_log10);
-Phase_EMG=tsd(Range(FilLFP_EMG) , angle(hilbert(zscore(Data(FilLFP_EMG))))*180/pi+180);
-Phase_EMG_rs = ds2videoFS(Phase_EMG);
-
-%% Process accelerometer (filter, smooth, resample) ; sampled at 50Hz
-MovAcctsd=tsd(Range(MovAcctsd),runmean(Data((MovAcctsd)).^2,ceil(smootime/median(diff(Range(MovAcctsd,'s'))))));
-MovAcctsd_rs = ds2videoFS(MovAcctsd);
-MovAcctsd_log10=tsd(Range(MovAcctsd),log10(runmean(Data((MovAcctsd)).^2,ceil(smootime/median(diff(Range(MovAcctsd,'s')))))));
-MovAcctsd_log10_rs = ds2videoFS(MovAcctsd_log10);
-
-%% Process respiration (filter, smooth, resample); sampled at 1250Hz
-
-FilLFP_respi = FilterLFP(respiration_LFP,[0.1 1],1024);
-respiENV = runmean(Data((FilLFP_respi)).^2,ceil(smootime/median(diff(Range(FilLFP_respi,'s')))));
-BreathingPower = tsd(Range(FilLFP_respi),respiENV);
-BreathingPower_rs = ds2videoFS(BreathingPower);
-BreathingPower_log10 = tsd(Range(FilLFP_respi),log10(respiENV));
-BreathingPower_log10_rs = ds2videoFS(BreathingPower_log10);
-BreathingPower_var = tsd(Range(BreathingPower) , movstd(Data(BreathingPower) , ceil(30/median(diff(Range(FilLFP_respi,'s'))))));
-BreathingPower_var_rs = ds2videoFS(BreathingPower_var);
-
-Phase=tsd(Range(FilLFP_respi) , angle(hilbert(zscore(Data(FilLFP_respi))))*180/pi+180);
-Phase_Above_350=thresholdIntervals(Phase,350,'Direction','Above');
-Phase_rs = ds2videoFS(Phase);
-
-Sniff=ts((Stop(Phase_Above_350)+Start(Phase_Above_350))/2);
-Sniff_rs = ds2videoFS(Sniff);
-
-% UltraLowSpectrumBM(datapath, 'LFP19','Piezzo');
-% P = load('Piezzo_UltraLow_Spectrum.mat');
-% Sptsd = tsd(P.Spectro{2}*1e4 , P.Spectro{1});
-% Breathing = ConvertSpectrum_in_Frequencies_BM(P.Spectro{3} , Range(Sptsd) , Data(Sptsd) , 'frequency_band' , [.25 1]);
-% Breathing_rs = ds2videoFS(Breathing);
-% Breathing_var = tsd(Range(Breathing) , movstd(Data(Breathing) , ceil(30/median(diff(Range(Breathing,'s')))),'omitnan'));
-% Breathing_var_rs = ds2videoFS(Breathing_var);
-
-% Calculate respi frequency
-% resp_z = detrend(Data(BreathingPower_rs),'linear');
-% 
-% % recompute zero-crossings on centred trace
-% zeroX  = find(resp_z(1:end-1)<=0 & resp_z(2:end)>0);
-% 
-% if numel(zeroX) > 1
-%     t    = Range(BreathingPower_rs,'s');          % seconds
-%     sniffT    = diff(t(zeroX));                    % sec between sniffs
-%     sniffRate = 1 ./ sniffT;                       % Hz
-% 
-%     % interpolate back to full 50 Hz grid
-%     sniffRate50 = interp1(t(zeroX(2:end)), sniffRate, t, ...
-%                           'linear','extrap');
-%     respiration_rate = tsd(t*1e4, sniffRate50);
-% else
-%     warning('Not enough zero-crossings to compute respiration rate');
-%     respiration_rate = tsd(Range(BreathingPower_rs,'s'), ...
-%                            nan(size(resp_z)));
-% end
-
-% clf
-% d = respiration_LFP;
-% d1 = respiration_LFP_rs;
-% hold all
-% plot(Range(d, 's'), Data(d), '*');
-% plot(Range(d1, 's'), Data(d1), '*');
-
-%% Define body parts and associated markers ---
+%% Markers
 bodyparts = {
     'Pupil', {'pupil_area_004','pupil_center_004','pupil_center_004_mvt'};
     'Eye',   {'eye_area_004'};
@@ -198,267 +138,378 @@ bodyparts = {
     'Ear',   {'ear_center','ear_center_mvt'};
     'Jaw',   {'jaw_center','jaw_center_mvt'};
     'Tongue',{'tongue_center','tongue_center_mvt'};
-    'Pupil_EyeCam', {'pupil_area_007','pupil_center_007','pupil_center_007_mvt'};
-    'Eye_EyeCam',   {'eye_area_007'};
+    'Pupil-EyeCam', {'pupil_area_007','pupil_center_007','pupil_center_007_mvt'};
+    'Eye-EyeCam',   {'eye_area_007'};
     'Spout', {'spout_likelihood'};
-    'OB_gamma_power', {'SmoothGamma','SmoothGamma_rs', 'Phase_OB', 'Phase_OB_rs'};
-    'Respiration', {'BreathingPower_rs', 'BreathingPower_log10_rs', 'Phase','Phase_rs'};
-%     'Respiration_other', {'BreathingPower_var_rs', 'Breathing', 'Breathing_rs', 'Breathing_var_rs'};
-    'EMG', {'EMGData_rs', 'EMGData_log10_rs', 'Phase_EMG', 'Phase_EMG_rs'};
-    'Accelerometer', {'MovAcctsd_rs', 'MovAcctsd_log10_rs'};
-    };
 
-%% colour setup 
-nbp          = size(bodyparts,1);         % number of body parts
-baseColors   = lines(nbp);               % distinct, high-contrast roots
-maxPerPart   = 5;                        % how many shades we pre-compute
-shadeLevels  = linspace(0,0.55,maxPerPart+1);   % 0 = dark root, ? lighter
-shadeLevels(1) = [];                     % remove 0 so root stays untouched
+    % Physio (from physio_for_behaviour.mat)
+    'OB-delta-power', {'OB_delta_rs','OB_delta_log10_rs','OB_delta_z_rs'};
+    'OB-gamma-power', {'OB_gamma_rs','OB_gamma_log10_rs','OB_gamma_z_rs'};
+    'OB-gamma-fast',  {'OB_gamma_fast_rs','OB_gamma_fast_log10_rs'};
+    'OB-delta-fast',  {'OB_delta_fast_rs','OB_delta_fast_log10_rs'};
 
-% helper: lighten a colour toward white by factor a (0–1)
-lighten = @(c,a) c + (1-c).*a;           % same as imadjust(col,[],[],gamma)
+    'Respiration', {'RespPower_rs','RespPower_log10_rs','RespPhase_rs'};
+    'EMG', {'EMGPower_rs','EMGPower_log10_rs','EMGPhase_rs'};
+    'Accelerometer', {'AccPower_rs','AccPower_log10_rs'};
+    'Heart', {'HeartPower_rs','HeartPower_log10_rs','HeartPhase_rs'};
+};
 
-fs = 50;
-baseline_pre = 0.2; % s
-stim_patch_len = 2.1; % s
-epoch_post = 2.0;    % s after reward
-reward_rel = nanmean(trial_structure.reward_onset.Target); % mean reward time rel to trial onset
-trial_dur = reward_rel + epoch_post;
-n_samples = round(trial_dur*fs)+1;
-baseline_samples = round(baseline_pre*fs);
-tvec = (0:n_samples-1)/fs;
+% Add imputed-arrival summary fields; keep ROC arrays in MAT (CSV drops them later)
+varNames = {'bodypart','marker','subset','window', ...
+    'nTar','nRef', ...
+    'nArrivalImputed','fracArrivalImputed', ...
+    'AshmanD','AUROC','CohensD','meanDiff', ...
+    'meanRef','meanTar','stdRef','stdTar', ...
+    'rocFPR','rocTPR'};
 
-%% Per-marker anticipatory window
-delayMean = nanmedian(trial_structure.rel_spout_arrival); 
-defaultWin = [3.7 delayMean]; % in seconds
+%% Colours
+nbp = size(bodyparts,1);
+baseColors = lines(nbp);
+maxPerPart = 5;
+shadeLevels = linspace(0,0.55,maxPerPart+1);
+shadeLevels(1) = [];
+lighten = @(c,a) c + (1-c).*a;
 
-% AW.nostril_area = defaultWin;
-% AW.nostril_center = defaultWin;
-% AW.nostril_center_mvt = defaultWin;
+%% Main loop
+for b = 1:size(bodyparts,1)
+    bp = bodyparts{b,1};
+    markers = bodyparts{b,2};
+    outDir = fullfile(outBase, bp);
+    if ~exist(outDir,'dir'), mkdir(outDir); end
 
-% AW.nose_area = [delayMean reward_rel]; % defaultWin
-% AW.nose_center = [delayMean reward_rel]; % defaultWin
-% AW.nose_center_mvt = [delayMean reward_rel]; % defaultWin
-% 
-% AW.cheek_center = [delayMean reward_rel]; % defaultWin
-% AW.cheek_center_mvt = [delayMean reward_rel]; % defaultWin
+    for ss = 1:numel(subsets)
+        subsetName = subsets(ss).name;
+        idxA = subsets(ss).idxA;
+        idxB = subsets(ss).idxB;
 
-% AW.ear_center = defaultWin;
-% AW.ear_center_mvt = defaultWin;
-% 
-% AW.jaw_center = defaultWin;
-% AW.jaw_center_mvt = defaultWin;
+        idxA = idxA(isfinite(trial_start_abs_s(idxA)));
+        idxB = idxB(isfinite(trial_start_abs_s(idxB)));
 
-% AW.tongue_center = [delayMean reward_rel];
-% AW.tongue_center_mvt = defaultWin;
+        for w = 1:numel(winNames)
+            wName = winNames{w};
 
-% AW.pupil_area_007 = defaultWin;
-% AW.pupil_center_007 = defaultWin;
-% AW.pupil_center_007_mvt = defaultWin;
+            n_markers = numel(markers);
+            colsTotal = 6; % PSTH | dist+kde | meanDiff | CohenD | AUROC | ROC
 
-% AW.eye_area_007 = defaultWin;
+            f = figure('Color','w','Visible','on');
+            set(f,'Position',[50 50 1900 max(420, 220*n_markers)]);
+            sgtitle(sprintf('%s | %s | %s | sw=%.3fs | Tar=%d Ref=%d', ...
+                bp, subsetName, wName, opts.smoothing_win_s, numel(idxA), numel(idxB)), ...
+                'Interpreter','none');
 
-% AW.SmoothGamma_rs = defaultWin;
+            rows = cell(0, numel(varNames));
+            allMet = struct('marker',{},'metrics',{});
 
-% AW.respiration_LFP_rs = defaultWin;
-% AW.respiration_rate =defaultWin;
+            % fixed arrival anchor (avoid identity leakage)
+            arrA = arrival_rel_s(idxA);
+            arrB = arrival_rel_s(idxB);
+            medA = nanmedian(arrA(isfinite(arrA)));
+            medB = nanmedian(arrB(isfinite(arrB)));
 
-% AW.EMGData_rs = defaultWin;
-% AW.MovAcctsd_log10_rs = [0.2 2.3]; % [delayMean-0.1 delayMean]
-% AW.MovAcctsd_rs = [0.2 2.3]; % [delayMean-0.1 delayMean]
-% 
-% antWin = AW;
-           
-%% Generate figures
-metricNames = {'AshmanD','AUROC','CohensD','meanDiff'};
-nMetrics    = numel(metricNames);
-colsTotal   = 2 + nMetrics;
-allMetrics  = struct();                % collect per bodypart
-
-for b = 1:nbp
-    bodypart_name = bodyparts{b,1};
-    marker_names = bodyparts{b,2};
-    baseCol   = baseColors(b,:);
-    n_markers = numel(marker_names);
-    
-    f{b} = figure('Color', 'w', 'visible', 'off'); sgtitle(['Name ' bodypart_name '. Smoothing: ' num2str(smoothing_win) 's. Ref# ' num2str(numel(idxRef)) '. Tar# ' num2str(numel(idxTar))]); 
-    set(f{b}, 'Position', [1 1 1980 n_markers*240]);
-    set(gcf,'renderer','OpenGL');
-    
-    for m = 1:n_markers
-        % pick colour: first marker = baseCol, next markers = lighter shades
-        col = baseCol;
-        if m > 1
-            a   = shadeLevels(min(m-1,numel(shadeLevels)));
-            col = lighten(baseCol,a);
-        end
-
-        marker_var = marker_names{m};
-        if ~exist(marker_var, 'var')
-            warning('%s does not exist in workspace, skipping...', marker_var);
-            continue
-        end
-        marker = eval(marker_var);
-        t_marker = Range(marker,'s');
-        y_marker = Data(marker);
-        
-        % ------ marker-specific anticipatory window ------------------------
-        if exist('antWin', 'var') && isfield(antWin, marker_var) && numel(antWin.(marker_var))==2
-            WinSec = antWin.(marker_var);     % [start  end] in seconds
-        else
-            WinSec = defaultWin;              % global default
-        end
-        
-        WinSamp = round(WinSec*fs);
-        WinSamp  = max(1, min(n_samples, WinSamp));  % clamp to [1, n_samples]
-        if diff(WinSamp) <= 0
-            warning('%s: anticipatory window invalid/collapsed; skipping stats panels.', marker_var);
-        end
-        WinStart = WinSec(1);   WinEnd = WinSec(2);
-        
-        % extract trial matrices ----------------------------------------  
-        smoothSamples = max( 1, round(smoothing_win * fs) ); % seconds ? samples
-        ref_mat = extractTrialMatrix(t_marker, y_marker, ref_onsets, ...
-                                     baseline_samples, n_samples, smoothSamples);
-        tar_mat = extractTrialMatrix(t_marker, y_marker, tar_onsets, ...
-                                     baseline_samples, n_samples, smoothSamples);
-        
-        if all(isnan(ref_mat(:))) && all(isnan(tar_mat(:)))
-            warning('%s: no valid trials extracted. Skipping subplot.', marker_var);
-            continue
-        end
-        
-        % anticipatory means
-        mRef = mean(ref_mat(:,WinSamp(1):WinSamp(2)),2,'omitnan');
-        mTar = mean(tar_mat(:,WinSamp(1):WinSamp(2)),2,'omitnan');
-        mean_ref = nanmean(ref_mat,1);
-        mean_tar = nanmean(tar_mat,1);
-        sem_ref  = nanstd(ref_mat,[],1)/sqrt(size(ref_mat,1));
-        sem_tar  = nanstd(tar_mat,[],1)/sqrt(size(tar_mat,1));
-        yl       = [min([mean_ref-sem_ref mean_tar-sem_tar]) , ...
-            max([mean_ref+sem_ref mean_tar+sem_ref])];
-        
-        validRef = mRef(isfinite(mRef));
-        validTar = mTar(isfinite(mTar));
-                        
-        % Metrics 
-        metrics = struct('AshmanD',nan,'AUROC',nan,'CohensD',nan,'meanDiff',nan, ...
-            'meanRef',nan,'meanTar',nan,'stdRef',nan,'stdTar',nan, ...
-            'rocFPR',[],'rocTPR',[]);
-        if numel(validRef)>3 && numel(validTar)>3
-            metrics.meanRef = mean(validRef);
-            metrics.meanTar = mean(validTar);
-            metrics.stdRef  = std(validRef);
-            metrics.stdTar  = std(validTar);
-            % Ashman D
-            vr = var(validRef); vt = var(validTar);
-            metrics.AshmanD = abs(mean(validRef)-mean(validTar)) / ...
-                sqrt(0.5*(vr+vt));
-            % AUROC
-            allv = [validRef; validTar];
-            if numel(unique(allv)) > 1
-                lab = [zeros(numel(validRef),1); ones(numel(validTar),1)];
-                [rocFPR,rocTPR,~,AUC] = perfcurve(lab, allv, 1);
-                metrics.AUROC = AUC; metrics.rocFPR = rocFPR; metrics.rocTPR = rocTPR;
+            arr_anchor = nan;
+            if isfinite(medA) && isfinite(medB)
+                arr_anchor = min(medA, medB);
+            elseif isfinite(medA)
+                arr_anchor = medA;
+            elseif isfinite(medB)
+                arr_anchor = medB;
             end
-            % Cohen’s d
-            sPool = sqrt(((numel(validRef)-1)*vr+(numel(validTar)-1)*vt)...
-                /(numel(validRef)+numel(validTar)-2));
-            metrics.CohensD = (mean(validTar)-mean(validRef))/sPool;
-            % mean difference (Tar-Ref)
-            metrics.meanDiff = mean(validTar)-mean(validRef);
+
+            for m = 1:n_markers
+                baseCol = baseColors(b,:);
+                col = baseCol;
+                if m > 1
+                    a = shadeLevels(min(m-1, numel(shadeLevels)));
+                    col = lighten(baseCol, a);
+                end
+                colRef = col;
+                colTar = max(0, min(1, col*0.5));
+                ColsRT = {colRef, colTar};
+                LegRT  = {'Ref','Tar'};
+
+                mk = markers{m};
+
+                [t_s, y] = get_marker_xy(mk, D, P);
+                if isempty(t_s)
+                    continue
+                end
+
+                goodA = idxA(isfinite(trial_start_abs_s(idxA)));
+                goodB = idxB(isfinite(trial_start_abs_s(idxB)));
+
+                onA = trial_start_abs_s(goodA);
+                onB = trial_start_abs_s(goodB);
+
+                matA = extract_matrix(t_s, y, onA, tvec(:), baseline_samples, smoothSamples);
+                matB = extract_matrix(t_s, y, onB, tvec(:), baseline_samples, smoothSamples);
+
+                % per-trial window means
+                xA = nan(size(matA,1),1);
+                xB = nan(size(matB,1),1);
+
+                for k = 1:size(matA,1)
+                    tr = goodA(k);
+                    wsec = window_for_trial(wName, tr, stim_on_rel_s, stim_off_rel_s, arrival_rel_s, arr_anchor);
+                    xA(k) = mean_in_window(matA(k,:), wsec, fs, n_samples);
+                end
+                for k = 1:size(matB,1)
+                    tr = goodB(k);
+                    wsec = window_for_trial(wName, tr, stim_on_rel_s, stim_off_rel_s, arrival_rel_s, arr_anchor);
+                    xB(k) = mean_in_window(matB(k,:), wsec, fs, n_samples);
+                end
+
+                dRef = xB(isfinite(xB));
+                dTar = xA(isfinite(xA));
+                nRef = numel(dRef);
+                nTar = numel(dTar);
+
+                doStats = (nRef >= opts.min_trials_per_group) && (nTar >= opts.min_trials_per_group);
+
+                if doStats
+                    met = effect_metrics(xA, xB);
+                else
+                    met = struct('AshmanD',nan,'AUROC',nan,'CohensD',nan,'meanDiff',nan, ...
+                        'meanRef',nan,'meanTar',nan,'stdRef',nan,'stdTar',nan, ...
+                        'rocFPR',[],'rocTPR',[]);
+                end
+
+                % arrival imputation summary for THIS subset (same for all markers, but we store per-row)
+                mask_subset = false(n,1);
+                mask_subset([goodA(:); goodB(:)]) = true;
+                nImp = sum(arrival_imputed & mask_subset);
+                nTot = sum(mask_subset);
+                fracImp = nImp / max(nTot,1);
+
+                % PSTH stats
+                meanA = nanmean(matA,1);
+                meanB = nanmean(matB,1);
+                semA  = nanstd(matA,[],1) / max(1, sqrt(size(matA,1)));
+                semB  = nanstd(matB,[],1) / max(1, sqrt(size(matB,1)));
+
+                lo = min([meanA-semA, meanB-semB]); hi = max([meanA+semA, meanB+semB]);
+                if ~isfinite(lo), lo = -1; end
+                if ~isfinite(hi), hi =  1; end
+                if lo == hi, lo = lo-1; hi = hi+1; end
+                pad = 0.05*(hi-lo);
+                yl = [lo-pad hi+pad];
+
+                pooled = [goodA; goodB];
+                stim_on_med  = nanmedian(stim_on_rel_s(pooled));
+                stim_off_med = nanmedian(stim_off_rel_s(pooled));
+                arr_med      = nanmedian(arrival_rel_s(pooled));
+                rew_med      = nanmedian(reward_rel_s_pertrial(pooled));
+
+                w0 = nan(numel(pooled),1); w1 = nan(numel(pooled),1);
+                for kk = 1:numel(pooled)
+                    tr = pooled(kk);
+                    wsec = window_for_trial(wName, tr, stim_on_rel_s, stim_off_rel_s, arrival_rel_s, arr_anchor);
+                    w0(kk) = wsec(1); w1(kk) = wsec(2);
+                end
+                w_med = [nanmedian(w0) nanmedian(w1)];
+
+                % ----- plotting row -----
+                row0 = (m-1)*colsTotal;
+
+                hasTar = ~isempty(matA) && size(matA,1) >= 1;
+                hasRef = ~isempty(matB) && size(matB,1) >= 1;
+
+                %% 1) PSTH
+                subplot(n_markers, colsTotal, row0+1); hold on
+
+                hStim = [];
+                if isfinite(stim_on_med) && isfinite(stim_off_med) && stim_off_med > stim_on_med
+                    hStim = patch([stim_on_med stim_off_med stim_off_med stim_on_med], [yl(1) yl(1) yl(2) yl(2)], ...
+                        [0.7 0.7 0.7], 'EdgeColor','none','FaceAlpha',0.18);
+                end
+
+                hSpout = [];
+                hReward = [];
+                if isfinite(arr_med), hSpout = plot([arr_med arr_med], yl, 'k--','LineWidth',1.2); end
+                if isfinite(rew_med), hReward = plot([rew_med rew_med], yl, 'r--','LineWidth',1.2); end
+
+                hAnt = [];
+                if all(isfinite(w_med)) && w_med(2) > w_med(1)
+                    hAnt = patch([w_med(1) w_med(2) w_med(2) w_med(1)], yl([1 1 2 2]), ...
+                        [0 1 0], 'EdgeColor','none','FaceAlpha',0.08);
+                end
+
+                hTar = [];
+                if hasTar
+                    hTar = shadedErrorBar_BM(tvec, matA, {'color',colTar,'LineWidth',2}, 1);
+                    set(hTar.patch,'FaceAlpha',0.15,'EdgeAlpha',0.25);
+                end
+
+                hRef = [];
+                if hasRef
+                    hRef = shadedErrorBar_BM(tvec, matB, {'color',colRef,'LineWidth',2}, 1);
+                    set(hRef.patch,'FaceAlpha',0.15,'EdgeAlpha',0.25);
+                end
+
+                ylabel(mk,'Interpreter','none');
+                if m==n_markers, xlabel('Time from trial onset (s)'); end
+                xlim([tvec(1) tvec(end)]); ylim(yl);
+                title(sprintf('%s (Tar=%d Ref=%d)', mk, nTar, nRef), 'Interpreter','none');
+                box off
+
+                if m==1
+                    hh = []; ll = {};
+                    if ~isempty(hStim), hh(end+1)=hStim; ll{end+1}='Stimulus'; end
+                    if ~isempty(hAnt),  hh(end+1)=hAnt;  ll{end+1}='Anticip window'; end
+                    if ~isempty(hRef),  hh(end+1)=hRef.mainLine; ll{end+1}='Reference'; end
+                    if ~isempty(hTar),  hh(end+1)=hTar.mainLine; ll{end+1}='Target'; end
+                    if ~isempty(hSpout),  hh(end+1)=hSpout;  ll{end+1}='Spout'; end
+                    if ~isempty(hReward), hh(end+1)=hReward; ll{end+1}='Reward'; end
+                    if ~isempty(hh)
+                        lgd = legend(hh,ll,'Location','westoutside');
+                        drawnow
+                        set(lgd,'Units','normalized');
+                        pL = lgd.Position;
+                        lgd.Position = [pL(1)-0.08  pL(2)  pL(3)  pL(4)];
+                    end
+                end
+
+                %% 2) Histogram + KDE
+                subplot(n_markers, colsTotal, row0+2); hold on
+                if nTar > 0
+                    histogram(dTar,30,'Normalization','pdf','FaceColor',colTar,'FaceAlpha',0.35,'EdgeColor','none');
+                end
+                if nRef > 0
+                    histogram(dRef,30,'Normalization','pdf','FaceColor',colRef,'FaceAlpha',0.35,'EdgeColor','none');
+                end
+                if nTar >= 7 && numel(unique(dTar)) > 1
+                    [f1,xi1] = ksdensity(dTar); plot(xi1,f1,'Color',colTar,'LineWidth',1.2);
+                end
+                if nRef >= 7 && numel(unique(dRef)) > 1
+                    [f2,xi2] = ksdensity(dRef); plot(xi2,f2,'Color',colRef,'LineWidth',1.2);
+                end
+                title(sprintf('AshmanD=%.2f', met.AshmanD), 'Interpreter','none');
+                box off; set(gca,'YAxisLocation','right');
+
+                %% 3) meanDiff
+                subplot(n_markers, colsTotal, row0+3); cla; hold on
+                if doStats
+                    MakeSpreadAndBoxPlot3_SB({dRef, dTar}, ColsRT, [1 2], LegRT, ...
+                        'newfig',0,'paired',0,'optiontest','ranksum','showpoints',1,'ShowSigstar','sig');
+                    title(sprintf('meanDiff (Tar-Ref) = %.3g', met.meanDiff), 'Interpreter','none');
+                else
+                    axis off
+                    title(sprintf('meanDiff skipped (nRef=%d nTar=%d)', nRef, nTar), 'Interpreter','none');
+                end
+                box off
+
+                %% 4) CohenD
+                subplot(n_markers, colsTotal, row0+4); cla; hold on
+                if doStats
+                    MakeSpreadAndBoxPlot3_SB({dRef, dTar}, ColsRT, [1 2], LegRT, ...
+                        'newfig',0,'paired',0,'optiontest','ranksum','showpoints',1,'ShowSigstar','sig');
+                    title(sprintf('Cohen''s d = %.2f', met.CohensD), 'Interpreter','none');
+                else
+                    axis off
+                    title(sprintf('Cohen''s d skipped (nRef=%d nTar=%d)', nRef, nTar), 'Interpreter','none');
+                end
+                box off
+
+                %% 5) AUROC
+                subplot(n_markers, colsTotal, row0+5); cla; hold on
+                if doStats
+                    MakeSpreadAndBoxPlot3_SB({dRef, dTar}, ColsRT, [1 2], LegRT, ...
+                        'newfig',0,'paired',0,'optiontest','ranksum','showpoints',1,'ShowSigstar','sig');
+                    title(sprintf('AUROC = %.2f', met.AUROC), 'Interpreter','none');
+                else
+                    axis off
+                    title(sprintf('AUROC skipped (nRef=%d nTar=%d)', nRef, nTar), 'Interpreter','none');
+                end
+                box off
+
+                %% 6) ROC
+                subplot(n_markers, colsTotal, row0+6); cla; hold on
+                if doStats && ~isempty(met.rocFPR)
+                    plot(met.rocFPR, met.rocTPR, 'k', 'LineWidth',1.5);
+                    plot([0 1],[0 1],'k:');
+                    xlim([0 1]); ylim([0 1]); axis square
+                    title(sprintf('AUC=%.2f', met.AUROC), 'Interpreter','none');
+                else
+                    plot([0 1],[0 1],'k:'); xlim([0 1]); ylim([0 1]); axis square
+                    title(sprintf('ROC skipped'), 'Interpreter','none');
+                end
+                xlabel('FPR'); ylabel('TPR'); box off
+
+                %% store row
+                rows(end+1,:) = {bp, mk, subsetName, wName, ...
+                    nTar, nRef, ...
+                    nImp, fracImp, ...
+                    met.AshmanD, met.AUROC, met.CohensD, met.meanDiff, ...
+                    met.meanRef, met.meanTar, met.stdRef, met.stdTar, ...
+                    {met.rocFPR}, {met.rocTPR}};
+
+                allMet(end+1).marker = mk;
+                allMet(end).metrics = met;
+            end
+
+            if isempty(rows)
+                close(f);
+                continue
+            end
+
+            T = cell2table(rows, 'VariableNames', varNames);
+
+            % save figure + per-(bp,subset,window) metrics
+            baseName = sprintf('%s_%s_%s_%s_sw%.3f', sessname, bp, subsetName, wName, opts.smoothing_win_s);
+
+            saveas(f, fullfile(outDir, [baseName '.png']));
+            saveas(f, fullfile(outDir, [baseName '.svg']));
+
+            close(f);
+
+            % Save full table (keeps ROC arrays) in this condition-specific file
+            S = struct();
+            S.table = T;
+            S.session = sessname;
+            S.bodypart = bp;
+            S.subset = subsetName;
+            S.window = wName;
+            S.allMet = allMet;
+            save(fullfile(outDir, [baseName '_metrics.mat']), '-struct','S');
+
+            % Also export CSV without ROC arrays (CSV-safe)
+            T_full = T;
+            vars_to_drop = intersect({'rocFPR','rocTPR'}, T_full.Properties.VariableNames);
+            T_csv = T_full;
+            if ~isempty(vars_to_drop)
+                T_csv = removevars(T_csv, vars_to_drop);
+            end
+            writetable(T_csv, fullfile(outDir, [baseName '_metrics.csv']));
+
+            % Session-level “latest” pointers (for across-session collection):
+            % keep one full MAT and one CSV per session per bodypart by overwriting.
+            save(fullfile(outDir, sprintf('%s_metrics_full.mat', sessname)), 'T_full');
+            writetable(T_csv, fullfile(outDir, sprintf('%s_metrics.csv', sessname)));
         end
-        allMetrics.(bodypart_name).(marker_var) = metrics;
-        
-        %% Time course plot 
-        subplot(n_markers,colsTotal,(m-1)*colsTotal + 1); hold on      
-        
-        % Gray patch = stimulus
-        hStim = patch([(stim_patch_len+0.2) 0.2 0.2 (stim_patch_len+0.2)], [yl(1) yl(1) yl(2) yl(2)], ...
-            [0.7 0.7 0.7],'EdgeColor','none','FaceAlpha',0.18);
-        % Spout
-        hSpout = plot([nanmean(trial_structure.rel_spout_arrival) nanmean(trial_structure.rel_spout_arrival)], yl, 'k--','LineWidth',1.2);
-        % Reward
-        hReward = plot([reward_rel reward_rel], yl, 'r--','LineWidth',1.2);
-        % plot
-        hRef = shadedErrorBar_BM(tvec, ref_mat, {'color',col,'LineWidth',2}, 1);
-        set(hRef.patch,'FaceAlpha',0.15,'EdgeAlpha',0.25); 
-        hTar = shadedErrorBar_BM(tvec, tar_mat, {'color',col*0.5,'LineWidth',2}, 1);
-        set(hTar.patch,'FaceAlpha',0.15,'EdgeAlpha',0.25);
-        hAnticip = patch([WinStart WinEnd WinEnd WinStart], ...
-            yl([1 1 2 2]), ...
-            [0 1 0],'FaceAlpha',0.08,'EdgeColor','none');
-        % Labels
-        ylabel(marker_var, 'Interpreter', 'none')
-        if m == 1
-            title(['Body Part: ' bodypart_name],'FontWeight','bold','FontSize',15)
-        end
-        if m == n_markers
-            xlabel('Time from trial onset (s)')
-        end
-        lgd = legend([hStim, hAnticip, hRef.mainLine, hTar.mainLine, hSpout, hReward], ...
-            {'Stimulus', 'Anticip window', 'Reference','Target', 'Spout', 'Reward'},'Location','westoutside');
-        drawnow                  % make sure the legend has a position
-        set(lgd,'Units','normalized')
-        p = lgd.Position;        % [x y w h] in figure-normalized units
-        lgd.Position = [p(1)-0.095  p(2)  p(3)  p(4)];
-        xlim([tvec(1) tvec(end)]); ylim(yl); box off; hold off
-        
-        %% Distributions and Ashmans'D
-        subplot(n_markers,colsTotal,(m-1)*colsTotal + 2); cla; hold on
-        if ~isempty(validRef), histogram(validRef,30,'Normalization','pdf', ...
-                'FaceColor',col,'FaceAlpha',0.4); end
-        if ~isempty(validTar), histogram(validTar,30,'Normalization','pdf', ...
-                'FaceColor',col*0.5,'FaceAlpha',0.4); end
-        
-        % KDE curves only if we have enough spread
-        if numel(validRef) > 3 && numel(unique(validRef)) > 1
-            [fR,xR] = ksdensity(validRef);  plot(xR,fR,'Color',[0.2 0.6 1],'LineWidth',1.2);
-        end
-        if numel(validTar) > 3 && numel(unique(validTar)) > 1
-            [fT,xT] = ksdensity(validTar);  plot(xT,fT,'Color',[1 0.4 0.4],'LineWidth',1.2);
-        end
-        
-        title(sprintf('Ashman D = %.2f', metrics.AshmanD), 'Interpreter','none','FontSize',8)
-        axis tight; box off; set(gca,'YAxisLocation','right')
-        if m==n_markers
-            xlabel(sprintf('Marker value (window %.1f–%.1f s)',WinStart,WinEnd));
-        end
-        %%  other metrics
-        for mc = 2:nMetrics
-            subplot(n_markers,colsTotal,(m-1)*colsTotal+1+mc); cla
-            MakeSpreadAndBoxPlot3_SB({mRef,mTar},{col,col*0.5},[1 2],...
-                {'Ref','Tar'},'newfig',0,...
-                'showpoints',1,'optiontest','ranksum','paired',0);
-            title(metricNames{mc})
-        end
-        
-        % ---- ROC curve panel -----------------------------------------------
-        subplot(n_markers,colsTotal,(m-1)*colsTotal + 1 + 1 + nMetrics); cla
-        plot(metrics.rocFPR, metrics.rocTPR, 'Color', col, 'LineWidth',1.5); hold on
-        plot([0 1],[0 1],'k:')                    % chance diagonal
-        axis square, box off
-        xlabel('False-positive rate'), ylabel('True-positive rate')
-        title(sprintf('ROC  (AUC = %.2f)', metrics.AUROC))
-        
-        hold off
     end
-     %% Save per-bodypart outputs 
-    outDir = fullfile(datapath,'analysis','behaviour',bodypart_name); [~,session_name] = fileparts(datapath);
-    if ~exist(outDir,'dir'), mkdir(outDir), end
-    saveas(f{b},fullfile(outDir,[session_name '_' bodypart_name '_' trialSet '_sw_' num2str(smoothing_win) '_aw_' num2str(round(WinSec(1))) '_' num2str(round(WinSec(2))) '.png']));
-   
-    outDir_1 = fullfile(fileparts(datapath), 'DS_figures', 'behaviour'); 
-    if ~exist(outDir_1,'dir'), mkdir(outDir_1), end
-    saveas(f{b},fullfile(outDir_1,[session_name '_' bodypart_name '_' trialSet '_sw_' num2str(smoothing_win) '_aw_' num2str(round(WinSec(1))) '_' num2str(round(WinSec(2))) '.png']));
-
-    T = struct2table(allMetrics.(bodypart_name));
-    writetable(T, fullfile(outDir,[bodypart_name '_' trialSet '_metrics.csv']));
-    save(fullfile(outDir,[bodypart_name '_' trialSet '_metrics.mat']),'T')
 end
-% close all
 
-%% Plot distribution of first licks
+end
+
+function t_s = ra_time_to_seconds(t)
+t = t(:);
+if numel(t) < 2
+    t_s = t;
+    return
+end
+dt = nanmedian(diff(t));
+if ~isfinite(dt)
+    t_s = t;
+    return
+end
+if dt > 1
+    t_s = t / 1e4;
+else
+    t_s = t;
+end
+end
+
+
+%% outdated: Plot distribution of first licks
 % lick_ref = trial_structure.lick_onset.Reference(find(~isnan(trial_structure.lick_onset.Reference)));
 % lick_tar = trial_structure.lick_onset.Target(find(~isnan(trial_structure.lick_onset.Target)));
 % figure('Name','First-lick latency'); clf
@@ -466,7 +517,7 @@ end
 % ylabel('Latency from trial onset (s)')
 % title('First-lick latency distribution')
 
-%% pieces of BM scripts physio
+%% outdated: pieces of BM scripts physio
 % % a bit irrelevant
 % load(fullfile(datapath, 'LFPData', 'LFP12.mat'))
 % FilGamma = FilterLFP(LFP,[40 60],1024);
@@ -661,4 +712,9 @@ end
 % 
 % 
 % 
-end
+
+
+
+
+
+

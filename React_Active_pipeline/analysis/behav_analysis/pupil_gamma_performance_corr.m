@@ -16,7 +16,7 @@ load(fullfile(datapath, 'stim', 'trial_structure.mat'))
 load(fullfile(datapath, 'video', 'DLC_data.mat'), 'pupil_area_007', 'pupil_center_007_mvt')
 
 if exist(fullfile(datapath,'SleepScoring_OBGamma.mat'),'file')
-    S = load(fullfile(datapath, 'SleepScoring_OBGamma.mat'),'BrainPower');
+    S = load(fullfile(datapath, 'ephys', 'SleepScoring_OBGamma.mat'),'BrainPower');
 else
     S = struct;
 end
