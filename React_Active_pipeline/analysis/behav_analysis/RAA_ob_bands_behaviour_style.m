@@ -159,7 +159,7 @@ rows = cell(0, numel(varNames));
 colsTotal = 6; % PSTH | dist+kde | meanDiff | CohenD | AUROC | ROC
 n_markers = numel(markers);
 
-fig = figure('Color','w','Visible','off');
+fig = figure('Color','w','Visible','on');
 set(fig,'Position',[50 50 1900 max(420, 220*n_markers)]);
 sgtitle(sprintf('%s | %s | %s | sw=%.3fs | Tar=%d Ref=%d', ...
     bodypart, opts.subsetName, opts.windowName, opts.smoothing_win_s, numel(idxTar), numel(idxRef)), ...
