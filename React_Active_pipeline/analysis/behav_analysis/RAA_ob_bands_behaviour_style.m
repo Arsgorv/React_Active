@@ -1,4 +1,4 @@
-function OUT = RAA_ob_bands_behaviour_style(datapath, SpectroLow, Baphy, stim_on_abs_s, G, opts)
+ function OUT = RAA_ob_bands_behaviour_style(datapath, SpectroLow, Baphy, stim_on_abs_s, G, opts)
 % RAA_ob_bands_behaviour_style
 % Per-session "behaviour_analysis.m style" figure + metrics for OB bands.
 %
