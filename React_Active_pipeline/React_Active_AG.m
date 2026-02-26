@@ -10,6 +10,7 @@ Paris, France
 
 %% Select sessions
 project = 'RA'; % 'RP' 'Tonotopy'
+project = 'RP'; % 'RP' 'Tonotopy'
 
 % Form the list of sessions
 selection = 2;
