@@ -40,6 +40,10 @@ KeepRaw = true;
 SaveMat = true;
 SaveFig = true;
 
+MFile = '';
+DLCSubdir = '';
+OutTag = '';
+
 SmoothWin = 5;
 MinRunLen = 20;
 ForceEarlyToHit = true;
@@ -91,6 +95,12 @@ if ~isempty(varargin)
                 
             case 'tsrate'
                 TsRate = val;
+            case 'mfile'
+                MFile = val;
+            case 'dlcsubdir'
+                DLCSubdir = val;
+            case 'outtag'
+                OutTag = val;
 
             otherwise
                 error('Unknown parameter: %s', key);
@@ -119,12 +129,14 @@ if ~exist(stimdir,'dir')
 end
 
 %% ---------------- load baphy mfile ----------------
-d = dir(fullfile(stimdir,'*.m'));
-if isempty(d)
-    error('No .m files found in: %s', stimdir);
+if isempty(MFile)
+    d = dir(fullfile(stimdir,'*.m'));
+    if isempty(d), error('No .m files found in: %s', stimdir); end
+    [~,ix] = max([d.datenum]);
+    mfile = fullfile(stimdir, d(ix).name);
+else
+    mfile = MFile;
 end
-[~,ix] = max([d.datenum]);
-mfile = fullfile(stimdir, d(ix).name);
 
 clear globalparams exptparams exptevents
 run(mfile);
@@ -553,7 +565,11 @@ spout_arrival_abs_s = nan(nTrials,1);
 spout_arrival_rel_s = nan(nTrials,1);
 
 if AddSpoutArrival
-    dlcfile = fullfile(datapath, 'video', 'DLC_data.mat');
+    if isempty(DLCSubdir)
+        dlcfile = fullfile(datapath,'video','DLC_data.mat');
+    else
+        dlcfile = fullfile(datapath,'video',DLCSubdir,'DLC_data.mat');
+    end
     if exist(dlcfile,'file')
         S = load(dlcfile, 'spout_likelihood');
         if isfield(S,'spout_likelihood') && ~isempty(S.spout_likelihood)
@@ -865,12 +881,15 @@ end
 
 %% -------------------- save --------------------
 if SaveMat
-    out = fullfile(stimdir,'Baphy_RA.mat');
+    tag = OutTag;
+    if isempty(tag), tag = ''; else, tag = ['_' tag]; end
+    
+    out = fullfile(stimdir, ['Baphy_RA' tag '.mat']);
     save(out,'Baphy','-v7.3');
 end
 if SaveFig && ~isempty(f1)
     try
-        saveas(f1, fullfile(stimdir,'session_structure.png'));
+        saveas(f1, fullfile(stimdir, ['session_structure' tag '.png']));
     catch
     end
 end

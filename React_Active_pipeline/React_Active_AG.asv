@@ -118,7 +118,7 @@ opts.video_gap_s = 1.0;      % split camera trains (seconds)
 Master_SleepScoring_preproc(sessions)
 
 %% Run manifest + make high-level epochs + per-run sync
-RAE_make_run_manifest(datapath);
+RAE_make_run_manifest(datapath, opts);
 
 %% PreProcessing: Behaviour 
 % Move DLC videos 
@@ -135,6 +135,8 @@ for sess = 1:numel(sessions)
 end
 
 Master_DLC_preproc(sessions, opts)
+% Master_DLC_preproc_RAexperiment(sessions, opts);   % NEW wrapper (small)
+
 
 %% PreProcessing: align all datastreams -> extract trial information -> reconstruct missed triggers -> make Epochs
 Master_data_sync_preproc(sessions, true, project)

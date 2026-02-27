@@ -1,10 +1,13 @@
-function [t_move_ts, t_arr_ts] = RA_extract_motor_times(datapath, trial_start_ts, trial_stop_ts)
+function [t_move_ts, t_arr_ts] = RA_extract_motor_times(datapath, trial_start_ts, trial_stop_ts, runTag)
 
 n = numel(trial_start_ts);
 t_move_ts = nan(n,1);
 t_arr_ts  = nan(n,1);
-
-dlc_file = fullfile(datapath,'video','DLC_data.mat');
+if isempty(runTag)
+    dlc_file = fullfile(datapath,'video','DLC_data.mat');
+else
+    dlc_file = fullfile(datapath,'video',runTag, 'DLC_data.mat');
+end
 if ~exist(dlc_file,'file')
     return
 end

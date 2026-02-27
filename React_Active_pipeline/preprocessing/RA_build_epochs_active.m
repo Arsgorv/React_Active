@@ -1,5 +1,5 @@
-function E = RA_build_epochs_active(datapath, trigOE, B)
-
+function E = RA_build_epochs_active(datapath, trigOE, B, runTag)
+if nargin < 4, runTag = ''; end
 TsRate = 1e4;
 
 % --- checks ---
@@ -96,7 +96,7 @@ m = goodStim & goodArr & (spout_arrival_ts > stim_start_ts);
 E.stimon_to_arrival = intervalSet(stim_start_ts(m), spout_arrival_ts(m));
 
 % Motor timing from DLC (ticks)
-[E.motor_move_start_ts, E.motor_arrival_ts] = RA_extract_motor_times(datapath, trial_start_ts, trial_stop_ts);
+[E.motor_move_start_ts, E.motor_arrival_ts] = RA_extract_motor_times(datapath, trial_start_ts, trial_stop_ts, runTag);
 
 % --- optional sanity check vs trigOE if provided ---
 if nargin >= 2 && isstruct(trigOE) && isfield(trigOE,'baphy') && isfield(trigOE.baphy,'trial_start_ts') ...
