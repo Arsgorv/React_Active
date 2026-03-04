@@ -8,12 +8,14 @@ Arsenii Goriachenkov
 Paris, France
 %}
 
-%% Select sessions
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SETTINGS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+
+%% Settings: Select sessions
 project = 'RA'; % 'RP' 'Tonotopy'
 mode = 'experiment';     % 'training' or 'experiment'
 
 % Form the list of sessions
-selection = 13;
+selection = 14;
 
 % Tvorozhok training
 Dir{1} = PathForExperimentsReactActive({'Tvorozhok'}, 'training', 'none', '11_10');
@@ -49,7 +51,7 @@ sessions = Dir{selection}.path';
 % sessions with DLC
 session_dlc = filter_sessions_with_dlc(sessions);
 
-%% Fixing sessions: Mochi
+%% Settings:  Fixing sessions: Mochi
 % remove sessions
 remove_sess = {...
         'Z:\Arsenii\React_Active\training\Mochi\20251106_m',... % remove completely: no camera , no OB
@@ -87,18 +89,18 @@ remove_sess = {...
         'Z:\Arsenii\React_Active\training\Tvorozhok\20250822_n',... % TEMPORARY REMOVE ; Weird OB for ob_events
 };
 
-%% Fixing sessions: Tvorozhok
+%% Settings:  Fixing sessions: Tvorozhok
 %     'Z:\Arsenii\React_Active\training\Tvorozhok\20250712',... % it looks alright, but let's see later
 %     'Z:\Arsenii\React_Active\training\Tvorozhok\20250716_n',... % it looks alright, but let's see later
 %     'Z:\Arsenii\React_Active\training\Tvorozhok\20250718_n',... % face mismatch. I see no problems with processing, but keep an eye
 
-%% Final session selection
+%% Settings:  Final session selection
 session_dlc = session_dlc((~ismember(session_dlc, remove_sess)));
 
 keepIdx = ~ismember(sessions, remove_sess);
 sessions = sessions(keepIdx);
 
-%% opts
+%% Settings:  opts
 opts = struct();
 opts.mode = mode;
 opts.project = project;
@@ -113,16 +115,17 @@ opts.smoothing_win = 1;
 opts.block_gap_s = 600;      % split Conditioning vs PostTest (seconds)
 opts.video_gap_s = 1.0;      % split camera trains (seconds)
 
-%% PreProcessing: Sleep Scoring
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% PREPROCESSING %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+
+%% PreProcessing:  Sleep Scoring
 % Ferret_ProcessData_BM % Original version
 Master_SleepScoring_preproc(sessions)
 
-%% Run manifest + make high-level epochs + per-run sync
-RAE_make_run_manifest(datapath, opts);
-
-%% PreProcessing: Behaviour 
+%% PreProcessing:  Behaviour 
 % Move DLC videos 
-to_dir = 'Z:\Arsenii\React_Passive_ephys\Processed_data\Kiri'; 
+% to_dir = 'Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\'; 
+to_dir = 'Z:\Arsenii\React_Active\training\Mochi\'; 
+
 from_dir = 'E:\DLC';
 copy_dlc_related_files(to_dir, from_dir)
 
@@ -135,11 +138,9 @@ for sess = 1:numel(sessions)
 end
 
 Master_DLC_preproc(sessions, opts)
-% Master_DLC_preproc_RAexperiment(sessions, opts);   % NEW wrapper (small)
 
-
-%% PreProcessing: align all datastreams -> extract trial information -> reconstruct missed triggers -> make Epochs
-Master_data_sync_preproc(sessions, true, project)
+%% PreProcessing:  align all datastreams -> extract trial information -> reconstruct missed triggers -> make Epochs
+Master_data_sync_preproc(sessions, false, project)
 
 % Check data sync
 for sess = 1:numel(sessions)
@@ -153,38 +154,66 @@ for sess = 1:numel(sessions)
     end
 end
 
-%% PreProcessing: FMA spikesorting
-Master_FMA_preproc
+%% PreProcessing:  FMA spikesorting
+sessions = {'Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\20260213'};
+opts = struct();
+if contains(sessions{1}, 'React_Active')
+    opts.phases = {'PreSleep', 'Conditioning', 'PostSleep', 'PostTest'};
+elseif contains(sessions{1}, 'React_Passive_ephys')
+    opts.phases = {'PreExp', 'Exp', 'PostExp'};
+end
+opts.force_sort = false;      % true if you want to re-run wave_clus
+opts.do_analysis = true;
+opts.save_unit_figs = true;  % set true only if you really want per-unit PNGs
+opts.do_sanity_figs = true;    % will create the epoch-column sanity figure
 
-%% PreProcessing: NP spikesorting
+opts.groups = {1:32};
+opts.commonRef = {1:32};
 
+Master_FMA_preproc(sessions, opts);
 
-%% PreProcessing: ECG and Respi
+%% PreProcessing:  NP spikesorting
+
+%% PreProcessing:  sync OneBox and OpenEphys
+% LFP = load_channel_as_tsd(fullfile(datapath,'ephys','LFPDataNP',['LFPmat_' segName '.mat']), 10);
+
+MAP = RAE_fit_onebox_to_master_map(datapath, segName, struct('onebox_adc_idx',3));
+OUT = RAE_apply_map_to_kilosort(datapath, segName, fullfile(datapath,'ephys','NP_spikes',segName), ...
+                                fullfile(datapath,'analysis','sync_onebox',['map_' segName '.mat']), struct('fs_ap',30000));
+                            sessions = {'Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\20260213'};
+
+opts.onebox_adc_idx = 3;    % ADC2
+opts.fs_ap = 30000;
+opts.force = false;
+opts.phase_filter = {'PreSleep', 'Conditioning', 'PostSleep', 'PostTest'}; % optional
+Master_NP_spikes_sync_preproc(sessions, opts);
+
+%% PreProcessing:  ECG and Respi
 % MakeHeartRateForSession_BM(varargin)
 % [Times,Template,HeartRate,GoodEpoch]=DetectHeartBeats_EmbReact_BM(LFP,NoiseEpoch,Options,plo)
 % MakeInstFreqForSession_BM
 
-
-%% PreProcessing: ripples
+%% PreProcessing:  ripples
 % [Spindles, meanVal, stdVal] = FindRipplesKJ(LFP, Epoch, varargin)
 
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% ANALYSIS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
 
-
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% %%
-
-%% Behaviour analysis
+%% Analysis:  Behaviour analysis
 React_Active_Behaviour_AG(session_dlc);
 
-%% Sound-evoked response analysis
+%% Analysis:  Sound-evoked response analysis
 
+%% Analysis:  Sound decoding
 
-%% Reactivation analysis
+%% Analysis:  Reactivation analysis
 
+%% Analysis:  Brain-Behaviour analysis
 
-%% Dataset figures
+%% Analysis:  Control analysis
 
+%% Analysis:  Dataset figures
 
-%% Paper figures
+%% Analysis:  Paper figures
 
 
 end
