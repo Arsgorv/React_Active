@@ -129,30 +129,35 @@ subsets(3).idxA = find(mskTar & mskGood & mskNM);
 subsets(3).idxB = find(mskRef & mskGood & mskNM);
 
 %% Markers
+% bodyparts = {
+%     'Pupil', {'pupil_area_004','pupil_center_004','pupil_center_004_mvt'};
+%     'Eye',   {'eye_area_004'};
+%     'Nostril',{'nostril_area','nostril_center','nostril_center_mvt'};
+%     'Nose',  {'nose_area','nose_center','nose_center_mvt'};
+%     'Cheek', {'cheek_center','cheek_center_mvt'};
+%     'Ear',   {'ear_center','ear_center_mvt'};
+%     'Jaw',   {'jaw_center','jaw_center_mvt'};
+%     'Tongue',{'tongue_center','tongue_center_mvt'};
+%     'Pupil-EyeCam', {'pupil_area_007','pupil_center_007','pupil_center_007_mvt'};
+%     'Eye-EyeCam',   {'eye_area_007'};
+%     'Spout', {'spout_likelihood'};
+% 
+%     % Physio (from physio_for_behaviour.mat)
+%     'OB-delta-power', {'OB_delta_rs','OB_delta_log10_rs','OB_delta_z_rs'};
+%     'OB-gamma-power', {'OB_gamma_rs','OB_gamma_log10_rs','OB_gamma_z_rs'};
+%     'OB-gamma-fast',  {'OB_gamma_fast_rs','OB_gamma_fast_log10_rs'};
+%     'OB-delta-fast',  {'OB_delta_fast_rs','OB_delta_fast_log10_rs'};
+% 
+%     'Respiration', {'RespPower_rs','RespPower_log10_rs','RespPhase_rs'};
+%     'EMG', {'EMGPower_rs','EMGPower_log10_rs','EMGPhase_rs'};
+%     'Accelerometer', {'AccPower_rs','AccPower_log10_rs'};
+%     'Heart', {'HeartPower_rs','HeartPower_log10_rs','HeartPhase_rs'};
+% };
+
 bodyparts = {
-    'Pupil', {'pupil_area_004','pupil_center_004','pupil_center_004_mvt'};
-    'Eye',   {'eye_area_004'};
-    'Nostril',{'nostril_area','nostril_center','nostril_center_mvt'};
-    'Nose',  {'nose_area','nose_center','nose_center_mvt'};
-    'Cheek', {'cheek_center','cheek_center_mvt'};
-    'Ear',   {'ear_center','ear_center_mvt'};
-    'Jaw',   {'jaw_center','jaw_center_mvt'};
-    'Tongue',{'tongue_center','tongue_center_mvt'};
     'Pupil-EyeCam', {'pupil_area_007','pupil_center_007','pupil_center_007_mvt'};
-    'Eye-EyeCam',   {'eye_area_007'};
-    'Spout', {'spout_likelihood'};
-
-    % Physio (from physio_for_behaviour.mat)
-    'OB-delta-power', {'OB_delta_rs','OB_delta_log10_rs','OB_delta_z_rs'};
-    'OB-gamma-power', {'OB_gamma_rs','OB_gamma_log10_rs','OB_gamma_z_rs'};
-    'OB-gamma-fast',  {'OB_gamma_fast_rs','OB_gamma_fast_log10_rs'};
-    'OB-delta-fast',  {'OB_delta_fast_rs','OB_delta_fast_log10_rs'};
-
-    'Respiration', {'RespPower_rs','RespPower_log10_rs','RespPhase_rs'};
-    'EMG', {'EMGPower_rs','EMGPower_log10_rs','EMGPhase_rs'};
-    'Accelerometer', {'AccPower_rs','AccPower_log10_rs'};
-    'Heart', {'HeartPower_rs','HeartPower_log10_rs','HeartPhase_rs'};
 };
+
 
 % Add imputed-arrival summary fields; keep ROC arrays in MAT (CSV drops them later)
 varNames = {'bodypart','marker','subset','window', ...

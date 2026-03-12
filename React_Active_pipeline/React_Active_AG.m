@@ -12,7 +12,7 @@ Paris, France
 
 %% Settings: Select sessions
 project = 'RA'; % 'RP' 'Tonotopy'
-mode = 'experiment';     % 'training' or 'experiment'
+mode = 'training';     % 'training' or 'experiment'
 
 % Form the list of sessions
 selection = 14;
@@ -29,21 +29,23 @@ Dir{6} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', '14_15');
 Dir{7} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', '16_17');
 Dir{8} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', '18_19');
 Dir{9} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', '20_21');
-Dir{10} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', 'all');
+Dir{10} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', '22_23');
+
+Dir{11} = PathForExperimentsReactActive({'Mochi'}, 'training', 'none', 'all');
 
 % Mix training
-Dir{11} = PathForExperimentsReactActive({'Mochi', 'Tvorozhok'}, 'training', 'none', 'all');
+Dir{12} = PathForExperimentsReactActive({'Mochi', 'Tvorozhok'}, 'training', 'none', 'all');
 
 % Tvorozhok experiment
-Dir{12} = PathForExperimentsReactActive({'Tvorozhok'}, 'experiment', 'none', '14_15');
-Dir{13} = PathForExperimentsReactActive({'Tvorozhok'}, 'experiment', 'none', '16_17');
-Dir{14} = PathForExperimentsReactActive({'Tvorozhok'}, 'experiment', 'none', 'all');
+Dir{13} = PathForExperimentsReactActive({'Tvorozhok'}, 'experiment', 'none', '14_15');
+Dir{14} = PathForExperimentsReactActive({'Tvorozhok'}, 'experiment', 'none', '16_17');
+Dir{15} = PathForExperimentsReactActive({'Tvorozhok'}, 'experiment', 'none', 'all');
 
 % Mochi experiment
-Dir{15} = PathForExperimentsReactActive({'Mochi'}, 'experiment', 'none', 'all');
+Dir{16} = PathForExperimentsReactActive({'Mochi'}, 'experiment', 'none', 'all');
 
 % Mix experiment
-Dir{16} = PathForExperimentsReactActive({'Mochi', 'Tvorozhok'}, 'experiment', 'none', 'all');
+Dir{17} = PathForExperimentsReactActive({'Mochi', 'Tvorozhok'}, 'experiment', 'none', 'all');
 
 
 sessions = Dir{selection}.path';
@@ -125,6 +127,7 @@ Master_SleepScoring_preproc(sessions)
 % Move DLC videos 
 % to_dir = 'Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\'; 
 to_dir = 'Z:\Arsenii\React_Active\training\Mochi\'; 
+% to_dir = 'Z:\Arsenii\'; 
 
 from_dir = 'E:\DLC';
 copy_dlc_related_files(to_dir, from_dir)
@@ -139,8 +142,53 @@ end
 
 Master_DLC_preproc(sessions, opts)
 
+%{ 
+Z:\Arsenii\React_Active\training\Mochi\20260218_m 
+Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\20260209
+
+interpolation issue
+Error using griddedInterpolant
+The grid vectors must contain unique points.
+
+Error in interp1 (line 151)
+        F = griddedInterpolant(X,V,method);
+
+Error in sync_behaviour_ephys (line 353)
+                dlcDataInterp(:, col) = interp1(time_trig(savedIndices), data(:, col), time_trig, 'linear', 'extrap');
+
+Error in Master_DLC_preproc (line 29)
+            sync_behaviour_ephys(datapath);
+
+
+
+Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\20260212
+Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\20260216
+Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\20260219
+Error using sync_behaviour_ephys (line 133)
+FACE: too few TTL edges detected (ch 93).
+%}
+
 %% PreProcessing:  align all datastreams -> extract trial information -> reconstruct missed triggers -> make Epochs
-Master_data_sync_preproc(sessions, false, project)
+Master_data_sync_preproc(sessions, true, project)
+
+%{
+Baphy trials are not properly detected @ 
+Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\20260309
+
+Z:\Arsenii\React_Active\training\Mochi\20260224_m
+Warning: Trial count mismatch: exptevents=336, trigBaphyTTL=349. Restricting to exptevents. 
+> In RA_parse_baphy_active (line 225)
+  In Master_data_sync_preproc (line 90) 
+
+Z:\Arsenii\React_Active\training\Mochi\20260226_m
+Warning: Trial count mismatch: exptevents=439, trigBaphyTTL=478. Restricting to exptevents. 
+
+Z:\Arsenii\React_Active\training\Mochi\20260302_n
+Warning: Trial count mismatch: exptevents=258, trigBaphyTTL=307. Restricting to exptevents. 
+
+Z:\Arsenii\React_Active\training\Mochi\20260304_m
+Warning: Trial count mismatch: exptevents=400, trigBaphyTTL=524. Restricting to exptevents. 
+%}
 
 % Check data sync
 for sess = 1:numel(sessions)
@@ -155,7 +203,7 @@ for sess = 1:numel(sessions)
 end
 
 %% PreProcessing:  FMA spikesorting
-sessions = {'Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\20260213'};
+sessions = {'Z:\Arsenii\React_Passive_ephys\Processed_data\Kiri\20260115'};
 opts = struct();
 if contains(sessions{1}, 'React_Active')
     opts.phases = {'PreSleep', 'Conditioning', 'PostSleep', 'PostTest'};
@@ -165,7 +213,7 @@ end
 opts.force_sort = false;      % true if you want to re-run wave_clus
 opts.do_analysis = true;
 opts.save_unit_figs = true;  % set true only if you really want per-unit PNGs
-opts.do_sanity_figs = true;    % will create the epoch-column sanity figure
+opts.do_sanity_figs = false;    % will create the epoch-column sanity figure
 
 opts.groups = {1:32};
 opts.commonRef = {1:32};
@@ -199,7 +247,7 @@ Master_NP_spikes_sync_preproc(sessions, opts);
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% ANALYSIS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
 
 %% Analysis:  Behaviour analysis
-React_Active_Behaviour_AG(session_dlc);
+React_Active_Behaviour_AG(session_dlc, opts);
 
 %% Analysis:  Sound-evoked response analysis
 
