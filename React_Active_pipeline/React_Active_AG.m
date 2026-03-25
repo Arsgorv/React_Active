@@ -3,7 +3,7 @@ function React_Active_AG()
 This is a pipeline for React_Active project
 Work in progres...
 
-Jul 2025
+2022-2027
 Arsenii Goriachenkov
 Paris, France
 %}
@@ -15,7 +15,7 @@ project = 'RA'; % 'RP' 'Tonotopy'
 mode = 'training';     % 'training' or 'experiment'
 
 % Form the list of sessions
-selection = 14;
+selection = 2;
 
 % Tvorozhok training
 Dir{1} = PathForExperimentsReactActive({'Tvorozhok'}, 'training', 'none', '11_10');
@@ -53,50 +53,55 @@ sessions = Dir{selection}.path';
 % sessions with DLC
 session_dlc = filter_sessions_with_dlc(sessions);
 
-%% Settings:  Fixing sessions: Mochi
-% remove sessions
+%% remove sessions completely 
 remove_sess = {...
-        'Z:\Arsenii\React_Active\training\Mochi\20251106_m',... % remove completely: no camera , no OB
-        'Z:\Arsenii\React_Active\training\Mochi\20251112_m',... % remove completely: very small number of trialss
-        'Z:\Arsenii\React_Active\training\Mochi\20251118_m',... % remove completely: short/no behav
-        'Z:\Arsenii\React_Active\training\Mochi\20251118_n',... % remove completely: short/no behav
-        'Z:\Arsenii\React_Active\training\Mochi\20251222_m',... % remove completely: no OB, no behaviour
-        'Z:\Arsenii\React_Active\training\Mochi\20251104_m',... % fix? spout
-        'Z:\Arsenii\React_Active\training\Mochi\20251111_n',... % fix? spout
-        'Z:\Arsenii\React_Active\training\Mochi\20251211_n',... % consider separately? 
-        'Z:\Arsenii\React_Active\training\Mochi\20251031_n',... % TEMPORARY REMOVE ; Weird OB for ob_events 
-        'Z:\Arsenii\React_Active\training\Mochi\20251104_m',... % TEMPORARY REMOVE ; Weird OB for ob_events 
-        'Z:\Arsenii\React_Active\training\Mochi\20251117_n',... % TEMPORARY REMOVE ; Weird OB for ob_events 
-        'Z:\Arsenii\React_Active\training\Mochi\20251128_n',... % TEMPORARY REMOVE ; Weird OB for ob_events 
-        'Z:\Arsenii\React_Active\training\Mochi\20251209_n',... % TEMPORARY REMOVE ; Weird OB for ob_events 
-        'Z:\Arsenii\React_Active\training\Mochi\20251219_m',... % TEMPORARY REMOVE ; Weird OB for ob_events 
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250723_m',... % fix? spout
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250731_m',...% fix? spout + face/eye mismatch
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250801_m',...% fix? spout + eye mismatch
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250818_n',...% fix? spout + face mismatch. Although it looks fine, spout is indeed misdetected
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250808_n',... % TEMPORARY REMOVE ; Weird OB for ob_events
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250813_n',... % TEMPORARY REMOVE ; Weird OB for ob_events
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250814_m',... % TEMPORARY REMOVE ; Weird OB for ob_events
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250814_n',... % TEMPORARY REMOVE ; Weird OB for ob_events
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250815_m',... % TEMPORARY REMOVE ; Weird OB for ob_events
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250815_n',... % TEMPORARY REMOVE ; Weird OB for ob_events
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250816_m',... % TEMPORARY REMOVE ; Weird OB for ob_events
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250818_m',... % TEMPORARY REMOVE ; Weird OB for ob_events
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250818_n',... % TEMPORARY REMOVE ; Weird OB for ob_events
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250820_m',... % TEMPORARY REMOVE ; Weird OB for ob_events
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250820_n',... % TEMPORARY REMOVE ; Weird OB for ob_events
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250821_m',... % TEMPORARY REMOVE ; Weird OB for ob_events
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250821_n',... % TEMPORARY REMOVE ; Weird OB for ob_events
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250822_m',... % TEMPORARY REMOVE ; Weird OB for ob_events
-        'Z:\Arsenii\React_Active\training\Tvorozhok\20250822_n',... % TEMPORARY REMOVE ; Weird OB for ob_events
+    'Z:\Arsenii\React_Active\training\Mochi\20251106_m',... % remove completely: no camera , no OB
+    'Z:\Arsenii\React_Active\training\Mochi\20251112_m',... % remove completely: very small number of trialss
+    'Z:\Arsenii\React_Active\training\Mochi\20251118_m',... % remove completely: short/no behav
+    'Z:\Arsenii\React_Active\training\Mochi\20251118_n',... % remove completely: short/no behav
+    'Z:\Arsenii\React_Active\training\Mochi\20251222_m',... % remove completely: no OB, no behaviour  
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250801_m',...% fix? spout + eye mismatch ; likely camera was one before O
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250723_m',...
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250731_m',...
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250801_m',...
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250807_m',...
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250822_n',...
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250818_m',...
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250818_n',...
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250820_m',...
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250820_n',...
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250821_m',...
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250821_n',...
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250822_m',...
+    'Z:\Arsenii\React_Active\training\Mochi\20251211_n',... % consider separately?
+    'Z:\Arsenii\React_Active\training\Mochi\20260218_m',...
+    'Z:\Arsenii\React_Active\training\Mochi\20260224_m',... 
+    'Z:\Arsenii\React_Active\training\Mochi\20260226_m',... 
+    'Z:\Arsenii\React_Active\training\Mochi\20260304_m',...     
+    'Z:\Arsenii\React_Active\training\Mochi\20260313_m',... 
+    };
+
+%% remove for ob_events
+remove_sess = {...
+    'Z:\Arsenii\React_Active\training\Mochi\20251128_n',... % The OB signal is not great
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250716_n',... % shortcut on licks -> ob events are not reliable.
+    };
+
+%% remove for respi
+
+%% Looks fine, but keep an eye
+remove_sess = {...
+    'Z:\Arsenii\React_Active\training\Mochi\20251031_n',... % LOOKS ALMOST FINE ; Weird OB for ob_events
+    'Z:\Arsenii\React_Active\training\Mochi\20251104_m',... % LOOKS FINE ; Weird OB for ob_events
+    'Z:\Arsenii\React_Active\training\Mochi\20251117_n',... % It's ok, just a huge noise that masked everything ; Weird OB for ob_events
+    'Z:\Arsenii\React_Active\training\Mochi\20251209_n',... % It's ok, just a huge noise that masked everything ; Weird OB for ob_events
+    'Z:\Arsenii\React_Active\training\Mochi\20251219_m',... % OB signal is perhaps degraded already; Weird OB for ob_events
+    'Z:\Arsenii\React_Active\training\Tvorozhok\20250718_n',... % face mismatch. I see no problems with processing, but keep an eye
 };
 
-%% Settings:  Fixing sessions: Tvorozhok
-%     'Z:\Arsenii\React_Active\training\Tvorozhok\20250712',... % it looks alright, but let's see later
-%     'Z:\Arsenii\React_Active\training\Tvorozhok\20250716_n',... % it looks alright, but let's see later
-%     'Z:\Arsenii\React_Active\training\Tvorozhok\20250718_n',... % face mismatch. I see no problems with processing, but keep an eye
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% Settings:  Final session selection
+%% Settings: Final session selection
 session_dlc = session_dlc((~ismember(session_dlc, remove_sess)));
 
 keepIdx = ~ismember(sessions, remove_sess);
@@ -123,72 +128,27 @@ opts.video_gap_s = 1.0;      % split camera trains (seconds)
 % Ferret_ProcessData_BM % Original version
 Master_SleepScoring_preproc(sessions)
 
-%% PreProcessing:  Behaviour 
-% Move DLC videos 
-% to_dir = 'Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\'; 
-to_dir = 'Z:\Arsenii\React_Active\training\Mochi\'; 
+%% Move DLC videos 
+to_dir = 'Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\'; 
+% to_dir = 'Z:\Arsenii\React_Active\training\Mochi\'; 
 % to_dir = 'Z:\Arsenii\'; 
 
 from_dir = 'E:\DLC';
 copy_dlc_related_files(to_dir, from_dir)
 
 % check if you have '_filtered.csv' everywhere
-for sess = 1:numel(sessions)
-    datapath = sessions{sess};
-    disp('------------------------------------------')
-    disp(['Working on ' datapath])
-    missing = check_missing_DLC_filtered_csv(datapath);
-end
+% for sess = 1:numel(sessions)
+%     datapath = sessions{sess};
+%     disp('------------------------------------------')
+%     disp(['Working on ' datapath])
+%     missing = check_missing_DLC_filtered_csv(datapath);
+% end
 
+%% PreProcessing:  Behaviour 
 Master_DLC_preproc(sessions, opts)
-
-%{ 
-Z:\Arsenii\React_Active\training\Mochi\20260218_m 
-Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\20260209
-
-interpolation issue
-Error using griddedInterpolant
-The grid vectors must contain unique points.
-
-Error in interp1 (line 151)
-        F = griddedInterpolant(X,V,method);
-
-Error in sync_behaviour_ephys (line 353)
-                dlcDataInterp(:, col) = interp1(time_trig(savedIndices), data(:, col), time_trig, 'linear', 'extrap');
-
-Error in Master_DLC_preproc (line 29)
-            sync_behaviour_ephys(datapath);
-
-
-
-Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\20260212
-Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\20260216
-Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\20260219
-Error using sync_behaviour_ephys (line 133)
-FACE: too few TTL edges detected (ch 93).
-%}
 
 %% PreProcessing:  align all datastreams -> extract trial information -> reconstruct missed triggers -> make Epochs
 Master_data_sync_preproc(sessions, true, project)
-
-%{
-Baphy trials are not properly detected @ 
-Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\20260309
-
-Z:\Arsenii\React_Active\training\Mochi\20260224_m
-Warning: Trial count mismatch: exptevents=336, trigBaphyTTL=349. Restricting to exptevents. 
-> In RA_parse_baphy_active (line 225)
-  In Master_data_sync_preproc (line 90) 
-
-Z:\Arsenii\React_Active\training\Mochi\20260226_m
-Warning: Trial count mismatch: exptevents=439, trigBaphyTTL=478. Restricting to exptevents. 
-
-Z:\Arsenii\React_Active\training\Mochi\20260302_n
-Warning: Trial count mismatch: exptevents=258, trigBaphyTTL=307. Restricting to exptevents. 
-
-Z:\Arsenii\React_Active\training\Mochi\20260304_m
-Warning: Trial count mismatch: exptevents=400, trigBaphyTTL=524. Restricting to exptevents. 
-%}
 
 % Check data sync
 for sess = 1:numel(sessions)

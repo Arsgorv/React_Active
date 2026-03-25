@@ -63,11 +63,11 @@ for sess = 1:numel(session_dlc)
 end
 
 %% Check if all sessions are well processed
-rootDir = 'Z:\Arsenii\React_Active\training\Tvorozhok';
+rootDir = 'Z:\Arsenii\React_Active\training\Mochi';
 
 opts = struct();
 opts.ignore_tilde_sessions = true;
-opts.save_csv = fullfile(rootDir, 'required_outputs_check_Tvorozhok.csv');
+opts.save_csv = fullfile(rootDir, 'required_outputs_check_Mochi.csv');
 
 [Report, remove_sess] = RA_check_required_outputs(rootDir, opts);
 
@@ -95,29 +95,35 @@ if ~isempty(rep)
 end
 
 %% DATASET: behavioural analysis
-markers = {'Accelerometer', 'Cheeck', 'EMG', 'Eye-EyeCam', 'Jaw', 'Nose', 'Nostril', 'OB-delta-fast', 'OB-gamma-fast', 'Pupil-EyeCam', 'Respiration'};
+% markers = {'Accelerometer', 'Cheeck', 'EMG', 'Eye-EyeCam', 'Jaw', 'Nose', 'Nostril', 'OB-delta-fast', 'OB-gamma-fast', 'Pupil-EyeCam', 'Respiration'};
+markers = {'Pupil-EyeCam'};
+
 for i = 1:numel(markers)
     opts.marker = markers{i};
     RAA_run_behaviour_across_sessions(remove_sess,opts)
 end
 
 path_csv = 'Z:\Arsenii\React_Active\training\Mochi\DS_figures\behaviour';
+% csv_files = {
+%     fullfile('Pupil_EyeCam', 'BigT_Pupil_EyeCam.csv'),...
+%     fullfile('Eye_EyeCam', 'BigT_Eye_EyeCam.csv'),...
+%     fullfile('Nostril', 'BigT_Nostril.csv'),...
+%     fullfile('Nose', 'BigT_Nose.csv'),...
+%     fullfile('Jaw', 'BigT_Jaw.csv'),...
+%     fullfile('EMG', 'BigT_EMG.csv'),...
+%     fullfile('Accelerometer', 'BigT_Accelerometer.csv'),...
+%     fullfile('OB_delta_fast', 'BigT_OB_delta_fast.csv'),...
+%     fullfile('OB_gamma_fast', 'BigT_OB_gamma_fast.csv'),...
+% };
 csv_files = {
     fullfile('Pupil_EyeCam', 'BigT_Pupil_EyeCam.csv'),...
-    fullfile('Eye_EyeCam', 'BigT_Eye_EyeCam.csv'),...
-    fullfile('Nostril', 'BigT_Nostril.csv'),...
-    fullfile('Nose', 'BigT_Nose.csv'),...
-    fullfile('Jaw', 'BigT_Jaw.csv'),...
-    fullfile('EMG', 'BigT_EMG.csv'),...
-    fullfile('Accelerometer', 'BigT_Accelerometer.csv'),...
-    fullfile('OB_delta_fast', 'BigT_OB_delta_fast.csv'),...
-    fullfile('OB_gamma_fast', 'BigT_OB_gamma_fast.csv'),...
 };
 
 RAA_collect_all_behaviour_tables(csv_files, fullfile(pwd,'across_sessions'));
 
 %% DATASET: OB Events analysis
 window = {'stimon_to_stimoff', 'stimoff_to_arrival', 'arr_to_stop'};
+
 window_selection = 2;
 
 % OB session summaries
@@ -129,8 +135,8 @@ BRES = RAA_collect_behaviour_marker_AUROC_across_sessions(sessions, struct( ...
     'bodypart','Pupil-EyeCam', 'marker','pupil_area_007', ...
     'subset','regular', 'window',window{window_selection}));
 % Scatter (OB theta vs pupil)
-RAA_scatter_pupil_vs_ob_theta_AUROC(RESob, BRES, struct( ...
-    'band','gamma', 'window',window{window_selection}, 'minN',10, 'useSpearman',false));
+% RAA_scatter_pupil_vs_ob_theta_AUROC(RESob, BRES, struct( ...
+%     'band','gamma', 'window',window{window_selection}, 'minN',10, 'useSpearman',false));
 RAA_scatter_pupil_vs_ob_specificity(RESob, BRES, opts)
 OUT = RAA_compare_emergence_speed_pupil_vs_ob(RESob, BRES, struct( ...
     'bandList',{{'delta','theta','gamma','highgamma'}}, ...
@@ -142,8 +148,8 @@ RESband = RAA_collect_ob_bandtraces_across_sessions(sessions, struct('alignName'
 RAA_plot_ob_bandtrace_heatmaps(RESband);
 
 
-RESresp = RAA_collect_resp_coupling_across_sessions(sessions, opts);
-RAA_plot_resp_coupling_across_sessions(RESresp, opts)
+% RESresp = RAA_collect_resp_coupling_across_sessions(sessions, opts);
+% RAA_plot_resp_coupling_across_sessions(RESresp, opts)
 
 %% %%%%%%%%%%%%%%%%%%%%%%%
 %     makePupilSummaryVideo(session_dlc{sess} , smoothing_win)

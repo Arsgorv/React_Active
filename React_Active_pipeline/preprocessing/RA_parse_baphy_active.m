@@ -132,6 +132,10 @@ end
 if isempty(MFile)
     d = dir(fullfile(stimdir,'*.m'));
     if isempty(d), error('No .m files found in: %s', stimdir); end
+    if numel(d) > 1
+        warning('RA_parse_baphy_active:MultipleMFiles', ...
+            'Multiple .m files found in %s. Using latest only. Use Master_data_sync_preproc for stitched multi-mfile parsing.', stimdir);
+    end
     [~,ix] = max([d.datenum]);
     mfile = fullfile(stimdir, d(ix).name);
 else
@@ -563,6 +567,24 @@ end
 %% -------------------- spout arrival (optional) --------------------
 spout_arrival_abs_s = nan(nTrials,1);
 spout_arrival_rel_s = nan(nTrials,1);
+spout_arrival_abs_s_raw = nan(nTrials,1);
+spout_arrival_rel_s_raw = nan(nTrials,1);
+spout_arrival_detected = false(nTrials,1);
+spout_arrival_imputed = false(nTrials,1);
+spout_arrival_usable = false(nTrials,1);
+
+spoutQC = struct();
+spoutQC.source = '';
+spoutQC.used_affine_remap = false;
+spoutQC.n_raw = 0;
+spoutQC.n_imputed = 0;
+spoutQC.n_missing = nTrials;
+spoutQC.temp = [];
+spoutQC.t_s = [];
+spoutQC.arrLagMin = ArrLagNom - ArrLagTol;
+spoutQC.arrLagMax = ArrLagNom + ArrLagTol;
+spoutQC.thr_like = nan(nTrials,1);
+spoutQC.thr_mvt = nan(nTrials,1);
 
 if AddSpoutArrival
     if isempty(DLCSubdir)
@@ -570,74 +592,140 @@ if AddSpoutArrival
     else
         dlcfile = fullfile(datapath,'video',DLCSubdir,'DLC_data.mat');
     end
+
     if exist(dlcfile,'file')
-        S = load(dlcfile, 'spout_likelihood');
+        S = load(dlcfile, 'spout_likelihood', 'spout_center_mvt', 'time_face_source');
+
         if isfield(S,'spout_likelihood') && ~isempty(S.spout_likelihood)
             spout_likelihood = S.spout_likelihood;
-            
-            temp = zscore(runmean(Data(spout_likelihood), 20));
-            t_sp = Range(spout_likelihood);
-            t_sp = t_sp(:);
-                        
-            % Heuristic: if times are small (<1e6) they are probably SECONDS, convert to ticks
-            if max(t_sp) < 1e6
-                t_sp_ts = t_sp * 1e4;
+            if isfield(S,'time_face_source') && ~isempty(S.time_face_source)
+                spoutQC.source = S.time_face_source;
             else
-                t_sp_ts = t_sp;  % already ticks
+                spoutQC.source = 'unknown';
             end
-            %spout = tsd(Range(spout_likelihood), temp);
-            
-            if isfield(trigBaphy,'face_cam') && isfield(trigBaphy.face_cam,'t_raw_ts') && ~isempty(trigBaphy.face_cam.t_raw_ts)
-                o = trigBaphy.face_cam.t_raw_ts(:);
-                
-                % If DLC time vector length matches number of frames/TTLs, index pairing works
-                m = min(numel(t_sp_ts), numel(o));
-                x = double(t_sp_ts(1:m));
-                y = double(o(1:m));
-                
-                % ensure unique x for interp/fit (important for dropped/duplicated frames)
-                [x, iu] = unique(x, 'stable');
-                y = y(iu);
-                
-                if numel(x) >= 2
-                    p = polyfit(x, y, 1);
-                    t_sp_ts = polyval(p, double(t_sp_ts));
+
+            like_raw = Data(spout_likelihood);
+            like_raw = like_raw(:);
+            t_sp = Range(spout_likelihood);
+            t_sp = ensure_seconds_vector(t_sp);
+
+            if strcmpi(spoutQC.source, 'csv_column') && ...
+                    isfield(trigBaphy,'face_cam') && isfield(trigBaphy.face_cam,'t_raw_ts') && ...
+                    ~isempty(trigBaphy.face_cam.t_raw_ts)
+                [t_sp, didMap] = maybe_affine_map_to_face_ttl(t_sp, trigBaphy.face_cam.t_raw_ts(:) ./ 1e4);
+                spoutQC.used_affine_remap = didMap;
+            end
+
+            like_smooth = runmean(like_raw, 20);
+            like_smooth = fillmissing_linear_local(like_smooth);
+
+            hasMvt = false;
+            if isfield(S,'spout_center_mvt') && ~isempty(S.spout_center_mvt)
+                spout_mvt = S.spout_center_mvt;
+                mvt_raw = Data(spout_mvt);
+                mvt_raw = mvt_raw(:);
+                if numel(mvt_raw) == numel(t_sp)
+                    mvt_smooth = runmean(mvt_raw, 10);
+                    mvt_smooth = fillmissing_linear_local(mvt_smooth);
+                    hasMvt = true;
                 end
             end
-            
-            spout = tsd(t_sp_ts, temp);
-            
-            ivRaw = thresholdIntervals(spout, SpoutThr, 'Direction', 'Above');
-            ivClean = mergeCloseIntervals(ivRaw, SpoutMergeGap);
-            ivClean = dropShortIntervals(ivClean, SpoutMinDur);
-
-            stAll_s = Start(ivClean, 's');  % absolute seconds
 
             arrLagMin = ArrLagNom - ArrLagTol;
             arrLagMax = ArrLagNom + ArrLagTol;
 
             for tr = 1:nTrials
-                if ~isfinite(abs_trialstart_s(tr)), continue; end
+                if ~isfinite(abs_trialstart_s(tr))
+                    continue
+                end
+
                 winBeg = abs_trialstart_s(tr) + arrLagMin;
                 winEnd = abs_trialstart_s(tr) + arrLagMax;
-                cand = stAll_s(stAll_s >= winBeg & stAll_s <= winEnd);
-                if ~isempty(cand)
-                    spout_arrival_abs_s(tr) = cand(1);
-                    spout_arrival_rel_s(tr) = cand(1) - abs_trialstart_s(tr);
+                baseBeg = abs_trialstart_s(tr) + max(0, arrLagMin - 1.2);
+                baseEnd = abs_trialstart_s(tr) + max(0, arrLagMin - 0.15);
+
+                kWin = find(t_sp >= winBeg & t_sp <= winEnd);
+                if isempty(kWin)
+                    continue
                 end
-            end
-            
-            ok = isfinite(spout_arrival_rel_s) & isfinite(rel_stim_start);
-            if nnz(ok) > 20
-                medArr = median(spout_arrival_rel_s(ok));
-                if medArr < 2 || medArr > 8
-                    warning('Spout arrival rel looks off (median=%.3fs). Likely spout clock is not mapped to OE/Baphy correctly.', medArr);
+
+                kBase = find(t_sp >= baseBeg & t_sp <= baseEnd);
+                if isempty(kBase)
+                    kBase = find(t_sp < winBeg);
+                    if numel(kBase) > 100
+                        kBase = kBase(max(1, end-99):end);
+                    end
+                end
+
+                xw = like_smooth(kWin);
+                tw = t_sp(kWin);
+                xb = like_smooth(kBase);
+
+                thLike = choose_trial_threshold(xb, SpoutThr);
+                spoutQC.thr_like(tr) = thLike;
+
+                dt = nanmedian(diff(tw));
+                if ~isfinite(dt) || dt <= 0
+                    hold_n = 3;
+                else
+                    hold_n = max(3, round(0.04 / dt));
+                end
+
+                t0 = first_sustained_crossing(tw, xw, thLike, hold_n);
+
+                if ~isfinite(t0) && hasMvt
+                    mw = mvt_smooth(kWin);
+                    mb = mvt_smooth(kBase);
+                    thMvt = choose_trial_threshold(mb, nan);
+                    spoutQC.thr_mvt(tr) = thMvt;
+                    t0 = first_sustained_crossing(tw, mw, thMvt, hold_n);
+                end
+
+                if isfinite(t0)
+                    spout_arrival_abs_s_raw(tr) = t0;
+                    spout_arrival_rel_s_raw(tr) = t0 - abs_trialstart_s(tr);
+                    spout_arrival_abs_s(tr) = t0;
+                    spout_arrival_rel_s(tr) = t0 - abs_trialstart_s(tr);
+                    spout_arrival_detected(tr) = true;
+                    spout_arrival_usable(tr) = true;
                 end
             end
 
-            % sanity: median Ref earlier than median Tar
-            refRel = spout_arrival_rel_s(idxRef);
-            tarRel = spout_arrival_rel_s(idxTar);
+            for tr = 1:nTrials
+                if spout_arrival_detected(tr)
+                    continue
+                end
+                relImp = local_median_arrival(spout_arrival_rel_s_raw, tr, 10);
+                if isfinite(relImp) && relImp >= arrLagMin && relImp <= arrLagMax && isfinite(abs_trialstart_s(tr))
+                    spout_arrival_rel_s(tr) = relImp;
+                    spout_arrival_abs_s(tr) = abs_trialstart_s(tr) + relImp;
+                    spout_arrival_imputed(tr) = true;
+                    spout_arrival_usable(tr) = true;
+                end
+            end
+
+            spoutQC.temp = like_smooth;
+            spoutQC.t_s = t_sp(:);
+            spoutQC.n_raw = nnz(spout_arrival_detected);
+            spoutQC.n_imputed = nnz(spout_arrival_imputed);
+            spoutQC.n_missing = nnz(~spout_arrival_usable);
+
+            if spoutQC.n_raw == 0
+                warning('No raw spout arrivals detected in %s.', dlcfile);
+            elseif spoutQC.n_raw < max(10, round(0.2 * nTrials))
+                warning('Sparse raw spout arrivals: %d/%d trials.', spoutQC.n_raw, nTrials);
+            end
+
+            ok = isfinite(spout_arrival_rel_s_raw) & isfinite(rel_stim_start);
+            if nnz(ok) > 10
+                medArr = median(spout_arrival_rel_s_raw(ok));
+                if medArr < 2 || medArr > 8
+                    warning('Spout arrival rel looks off (median=%.3fs). Check face/Baphy alignment.', medArr);
+                end
+            end
+
+            refRel = spout_arrival_rel_s_raw(idxRef);
+            tarRel = spout_arrival_rel_s_raw(idxTar);
             if any(isfinite(refRel)) && any(isfinite(tarRel))
                 mRef = median(refRel(isfinite(refRel)));
                 mTar = median(tarRel(isfinite(tarRel)));
@@ -710,6 +798,7 @@ Baphy.meta.assumptions = struct();
 Baphy.meta.assumptions.ForceNoMotorTargetToNaN = ForceNoMotorTargetToNaN;
 Baphy.meta.assumptions.ForceEarlyToHit = ForceEarlyToHit;
 Baphy.meta.fatigue = struct('SmoothWin',SmoothWin,'MinRunLen',MinRunLen);
+Baphy.meta.spout = spoutQC;
 
 Baphy.n_trials = nTrials;
 Baphy.trial_id = trial_id(:);
@@ -745,6 +834,11 @@ end
 
 Baphy.trial.spout_arrival_abs_s = spout_arrival_abs_s(:);
 Baphy.trial.spout_arrival_rel_s = spout_arrival_rel_s(:);
+Baphy.trial.spout_arrival_abs_s_raw = spout_arrival_abs_s_raw(:);
+Baphy.trial.spout_arrival_rel_s_raw = spout_arrival_rel_s_raw(:);
+Baphy.trial.spout_arrival_detected = spout_arrival_detected(:);
+Baphy.trial.spout_arrival_imputed = spout_arrival_imputed(:);
+Baphy.trial.spout_arrival_usable = spout_arrival_usable(:);
 
 Baphy.idx = idx;
 Baphy.M = M;
@@ -802,8 +896,10 @@ if mx > nTrials
     warning('exptevents has trials up to %d, but n_trials=%d. Ignoring >nTrials.', mx, nTrials);
 end
 
+f1 = [];
+fSpout = [];
+
 %% -------------------- figure (legacy-style hit rate vs ABS time) --------------------
-% f1 = [];
 if SaveFig
     tAll = Baphy.trial.abs_trialstart_s(:);
     hr = Baphy.Perf.hit_rate_all(:);
@@ -879,11 +975,62 @@ if SaveFig
     grid on; box on;
 end
 
+if SaveFig && AddSpoutArrival && ~isempty(spoutQC.t_s)
+    try
+        fSpout = figure('Color','w','visible','off');
+        set(fSpout, 'Units', 'Pixels', 'Position', [50 50 1400 850]);
+
+        subplot(3,1,1);
+        plot(spoutQC.t_s, spoutQC.temp, 'k-'); hold on;
+        yline(SpoutThr, 'r--');
+        if any(spout_arrival_detected)
+            plot(spout_arrival_abs_s_raw(spout_arrival_detected), ...
+                interp1_unique_safe(spoutQC.t_s, spoutQC.temp, spout_arrival_abs_s_raw(spout_arrival_detected)), ...
+                'go', 'MarkerSize', 4, 'LineWidth', 1);
+        end
+        if any(spout_arrival_imputed)
+            plot(spout_arrival_abs_s(spout_arrival_imputed), ...
+                interp1_unique_safe(spoutQC.t_s, spoutQC.temp, spout_arrival_abs_s(spout_arrival_imputed)), ...
+                'rx', 'MarkerSize', 4, 'LineWidth', 1);
+        end
+        xlabel('Time (s)');
+        ylabel('Spout likelihood');
+        title('Spout likelihood and arrivals');
+        grid on;
+
+        subplot(3,1,2);
+        plot(1:nTrials, spout_arrival_rel_s_raw, 'go'); hold on;
+        plot(1:nTrials, spout_arrival_rel_s, 'k.');
+        plot(find(spout_arrival_imputed), spout_arrival_rel_s(spout_arrival_imputed), 'rx');
+        xlabel('Trial');
+        ylabel('Arrival rel. time (s)');
+        legend({'raw','final','imputed'}, 'Location', 'best');
+        title(sprintf('raw=%d, imputed=%d, missing=%d', ...
+            spoutQC.n_raw, spoutQC.n_imputed, spoutQC.n_missing));
+        grid on;
+
+        subplot(3,1,3);
+        histogram(spout_arrival_rel_s_raw(isfinite(spout_arrival_rel_s_raw)), 30); hold on;
+        histogram(spout_arrival_rel_s(spout_arrival_imputed), 30);
+        xlabel('Arrival rel. time (s)');
+        ylabel('Count');
+        legend({'raw','imputed'}, 'Location', 'best');
+        title('Arrival distribution');
+        grid on;
+    catch MEsp
+        warning('Spout QC plot failed: %s', MEsp.message);
+        if exist('fSpout','var') && ~isempty(fSpout)
+            try, close(fSpout); end %#ok<TRYNC>
+        end
+        fSpout = [];
+    end
+end
+
 %% -------------------- save --------------------
+tag = OutTag;
+if isempty(tag), tag = ''; else, tag = ['_' tag]; end
+
 if SaveMat
-    tag = OutTag;
-    if isempty(tag), tag = ''; else, tag = ['_' tag]; end
-    
     out = fullfile(stimdir, ['Baphy_RA' tag '.mat']);
     save(out,'Baphy','-v7.3');
 end
@@ -893,5 +1040,124 @@ if SaveFig && ~isempty(f1)
     catch
     end
 end
+if SaveFig && ~isempty(fSpout)
+    try
+        saveas(fSpout, fullfile(stimdir, ['spout_QC' tag '.png']));
+    catch
+    end
+end
 
+end
+
+function yq = interp1_unique_safe(x, y, xq)
+x = double(x(:));
+y = double(y(:));
+xq = double(xq(:));
+yq = nan(size(xq));
+if isempty(x) || isempty(y) || isempty(xq)
+    return
+end
+n = min(numel(x), numel(y));
+x = x(1:n);
+y = y(1:n);
+ok = isfinite(x) & isfinite(y);
+x = x(ok);
+y = y(ok);
+if numel(x) < 2
+    return
+end
+[xu, ia] = unique(x, 'stable');
+yu = y(ia);
+if numel(xu) < 2
+    return
+end
+yq = interp1(xu, yu, xq, 'linear', 'extrap');
+end
+
+function t_s = ensure_seconds_vector(t)
+t_s = double(t(:));
+if isempty(t_s), return; end
+if nanmedian(diff(t_s)) > 1
+    t_s = t_s ./ 1e4;
+end
+end
+
+function [t_out_s, didMap] = maybe_affine_map_to_face_ttl(t_in_s, face_ttl_s)
+t_out_s = t_in_s(:);
+didMap = false;
+
+m = min(numel(t_out_s), numel(face_ttl_s));
+if m < 2
+    return
+end
+
+x = double(t_out_s(1:m));
+y = double(face_ttl_s(1:m));
+[x, iu] = unique(x, 'stable');
+y = y(iu);
+
+if numel(x) >= 2
+    p = polyfit(x, y, 1);
+    t_out_s = polyval(p, double(t_out_s));
+    didMap = true;
+end
+end
+
+function x = fillmissing_linear_local(x)
+x = double(x(:));
+if isempty(x), return; end
+good = find(isfinite(x));
+if isempty(good)
+    return
+end
+if numel(good) == 1
+    x(~isfinite(x)) = x(good);
+    return
+end
+bad = find(~isfinite(x));
+if isempty(bad)
+    return
+end
+x(bad) = interp1(good, x(good), bad, 'linear', 'extrap');
+end
+
+function th = choose_trial_threshold(xb, defaultThr)
+xb = double(xb(:));
+xb = xb(isfinite(xb));
+
+if isempty(xb)
+    if nargin < 2 || ~isfinite(defaultThr)
+        th = 0;
+    else
+        th = defaultThr;
+    end
+    return
+end
+
+mu = median(xb);
+sig = median(abs(xb - mu));
+sig = 1.4826 * sig;
+
+if ~isfinite(sig) || sig == 0
+    sig = std(xb);
+end
+if ~isfinite(sig)
+    sig = 0;
+end
+
+th = mu + 4 * sig;
+if nargin >= 2 && isfinite(defaultThr)
+    th = max(th, defaultThr);
+end
+end
+
+function relImp = local_median_arrival(relRaw, tr, halfWidth)
+relImp = nan;
+ix = max(1, tr-halfWidth):min(numel(relRaw), tr+halfWidth);
+ix(ix == tr) = [];
+vals = relRaw(ix);
+vals = vals(isfinite(vals));
+if numel(vals) >= 3
+    relImp = median(vals);
+end
 end

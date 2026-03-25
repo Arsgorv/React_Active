@@ -19,8 +19,11 @@ end
 
 animals = {'Tvorozhok','Mochi'};
 
-pairs.Tvorozhok = {'11_10','13_12'}; % training only
-pairs.Mochi     = {'11_10','13_12','14_15','16_17','18_19'};
+% pairs.Tvorozhok = {'11_10','13_12'}; % training only
+% pairs.Mochi     = {'11_10','13_12','14_15','16_17','18_19'};
+
+pairs.Tvorozhok = {'13_12'}; % training only
+pairs.Mochi     = {'20_21'};
 
 R = {};
 for a = 1:numel(animals)

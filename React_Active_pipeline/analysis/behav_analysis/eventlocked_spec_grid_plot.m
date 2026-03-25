@@ -232,7 +232,7 @@ for c = 1:nGroups
     ax1 = subplot(nRows, nCols, c);
     imagesc(t_rel, f_plot, Lb'); axis xy
     title(sprintf('%s (n=%d)', gname, nEv), 'Interpreter','none');
-    ylabel('Hz'); xlabel(sprintf('t from %s (s)', alignName), 'Interpreter','none');
+    ylabel('Frequency, Hz'); xlabel(sprintf('Time, s (from %s )', alignName), 'Interpreter','none');
     box off
     % colormap viridis
     try

@@ -129,7 +129,7 @@ V_L = P_tf_L(:, fmaskL);
 % MID
 hasMID = false;
 V_M = []; t_abs_M = []; f_plot_M = [];
-midFile = fullfile(datapath,'ephys','Tvorozhok_2026-02-20_19-12-58_RA_PostTest','B_Middle_Spectrum.mat');
+midFile = fullfile(datapath,'ephys','B_Middle_Spectrum.mat');
 if exist(midFile,'file')
     Sm = load(midFile,'Spectro');
     if isfield(Sm,'Spectro') && ~isempty(Sm.Spectro)

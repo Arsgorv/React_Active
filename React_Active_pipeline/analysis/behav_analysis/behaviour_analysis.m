@@ -79,7 +79,8 @@ baseline_samples = max(1, round(opts.baseline_pre_s*fs));
 smoothSamples = max(1, round(opts.smoothing_win_s*fs));
 
 %% define windows
-winNames = {'stimon_to_stimoff','stimon_to_arrival','stimoff_to_arrival','arrival_m500_to_arrival'};
+% winNames = {'stimon_to_stimoff','stimon_to_arrival','stimoff_to_arrival','arrival_m500_to_arrival'};
+winNames = {'stimoff_to_arrival'};
 
 %% trial masks
 mskGood = false(n,1);
@@ -196,7 +197,7 @@ for b = 1:size(bodyparts,1)
             n_markers = numel(markers);
             colsTotal = 6; % PSTH | dist+kde | meanDiff | CohenD | AUROC | ROC
 
-            f = figure('Color','w','Visible','on');
+            f = figure('Color','w','Visible','off');
             set(f,'Position',[50 50 1900 max(420, 220*n_markers)]);
             sgtitle(sprintf('%s | %s | %s | sw=%.3fs | Tar=%d Ref=%d', ...
                 bp, subsetName, wName, opts.smoothing_win_s, numel(idxA), numel(idxB)), ...

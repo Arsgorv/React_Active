@@ -3,7 +3,7 @@ function RAA_plot_behaviour_B1_to_B4(BigT, SessT, markerName, outRoot)
 % Uses ONLY one selected window for plotting (default: 'stimoff_to_arrival').
 % B3 AUROC threshold = 0.6.
 
-if nargin < 4 || isempty(outRoot)
+ if nargin < 4 || isempty(outRoot)
     outRoot = fullfile(pwd, 'DS_figures', 'behaviour');
 end
 if ~exist(outRoot,'dir'), mkdir(outRoot); end
@@ -108,7 +108,7 @@ TaC = collapse_by_session_subset_window(Ta);
 ylA = ylims_across_subsets(TaC, sessNames, subsets, 'AUROC', [0.35 0.75]);
 ylD = ylims_across_subsets(TaC, sessNames, subsets, 'meanDiff', []);
 
-f1 = figure('Color','w','Position',[50 50 1300 900], 'visible', 'off');
+f1 = figure('Color','w','Position',[50 50 1300 900], 'visible', 'on');
 
 for r = 1:3
     subset = subsets{r};
@@ -139,7 +139,7 @@ for r = 1:3
     xticks(ax, nice_xticks(nSess));
     ylabel(ax,'AUROC');
     title(ax, sprintf('%s | AUROC', subset), 'Interpreter','none','FontWeight','bold');
-    grid(ax,'on');
+    grid(ax,'off');
 
     ax = subplot(3,2,(r-1)*2+2);
     hold(ax,'on'); set(ax,'Box','off','FontSize',FS);
@@ -167,7 +167,7 @@ for r = 1:3
     xticks(ax, nice_xticks(nSess));
     ylabel(ax,'meanDiff');
     title(ax, sprintf('%s | meanDiff (Tar-Ref)', subset), 'Interpreter','none','FontWeight','bold');
-    grid(ax,'on');
+    grid(ax,'off');
 end
 
 xlabel(subplot(3,2,5),'Global session #');
@@ -175,13 +175,13 @@ xlabel(subplot(3,2,6),'Global session #');
 sgtitle(sprintf('B1a %s | %s | window=%s', tag, mk, winSel), 'Interpreter','none','FontWeight','bold');
 
 saveas(f1, fullfile(outRoot, sprintf('%s_%s_B1a_global_%s.png', tag, mk_file, winSel)));
-close(f1);
+% close(f1);
 
 
 % ---------------- B1b (block-aligned, regular) ----------------
 Tr = TaC(strcmpi_safe(TaC.Subset,'regular'), :);
 if ~isempty(Tr) && height(Tr)>0
-    f2 = figure('Color','w','Position',[50 50 600 700], 'visible', 'off');
+    f2 = figure('Color','w','Position',[50 50 600 700], 'visible', 'on');
     blocks = unique(Tr.SoundPair,'stable');
     C = gradient_multicolor(numel(blocks));
 
@@ -211,7 +211,7 @@ if ~isempty(Tr) && height(Tr)>0
 
     sgtitle(sprintf('B1b %s | %s | window=%s', tag, mk, winSel), 'Interpreter','none','FontWeight','bold');
     saveas(f2, fullfile(outRoot, sprintf('%s_%s_B1b_block_aligned_%s.png', tag, mk, winSel)));
-    close(f2);
+%     close(f2);
 end
 
 % ---------------- B2 (first vs expert + names) ----------------
@@ -234,7 +234,27 @@ if ~isempty(Tr) && height(Tr)>0
         fprintf('  Block %s: FIRST=%s ; EXPERT=mean(%s)\n', blocks{b}, firstName{b}, strjoin(expertNames{b}, ', '));
     end
 
-    f3 = figure('Color','w','Position',[50 50 650 650], 'visible', 'off');
+    % Fallback for paired spread/box plots:
+    % if only one valid sound pair contributes, firstA/expertA contain just one value.
+    % In that case, use the first 3 and last 3 valid sessions from that block instead.
+    firstA_box = firstA; expertA_box = expertA;
+    firstD_box = firstD; expertD_box = expertD;
+    validB2 = find(isfinite(firstA) & isfinite(expertA));
+    if numel(validB2) <= 1
+        if numel(validB2) == 1
+            Tbox = Tr(strcmpi_safe(Tr.SoundPair, blocks{validB2}), :);
+            blockLabel = blocks{validB2};
+        else
+            Tbox = Tr;
+            blockLabel = 'all available sessions';
+        end
+        [firstA_box, expertA_box] = first_n_vs_last_n(Tbox, blockIdxMap, 'AUROC', 3);
+        [firstD_box, expertD_box] = first_n_vs_last_n(Tbox, blockIdxMap, 'meanDiff', 3);
+        fprintf('  B2 fallback: only %d valid block found, using first 3 vs last 3 sessions from %s for paired plots.\n', ...
+            numel(validB2), blockLabel);
+    end
+
+    f3 = figure('Color','w','Position',[50 50 650 650], 'visible', 'on');
 
     ax = subplot(2,2,1);
     hold(ax,'on'); set(ax,'Box','off','FontSize',FS);
@@ -247,8 +267,8 @@ if ~isempty(Tr) && height(Tr)>0
     ylabel(ax,'AUROC'); grid(ax,'on');
 
     subplot(2,2,2);
-    MakeSpreadAndBoxPlot3_SB({firstA, expertA}, {[.25 .5 .9], [.25 .5 .9]}, [1 2], {'First','Expert'}, ...
-        'paired',1,'newfig',0,'showpoints',1);
+    MakeSpreadAndBoxPlot3_SB({firstA_box, expertA_box}, {[.25 .5 .9], [.25 .5 .9]}, [1 2], {'First','Expert'}, ...
+        'paired',1,'newfig',0,'showpoints',1, 'showsigstar', 'sig', 'optiontest', 'ttest');
     set(gca,'Box','off','FontSize',FS);
     yline(0.5,'k:','LineWidth',LWthin);
     title('B2 | AUROC: paired across sound pairs','FontWeight','bold');
@@ -265,7 +285,7 @@ if ~isempty(Tr) && height(Tr)>0
     ylabel(ax,'meanDiff'); grid(ax,'on');
 
     subplot(2,2,4);
-    MakeSpreadAndBoxPlot3_SB({firstD, expertD}, {[.2 .7 .2], [.2 .7 .2]}, [1 2], {'First','Expert'}, ...
+    MakeSpreadAndBoxPlot3_SB({firstD_box, expertD_box}, {[.2 .7 .2], [.2 .7 .2]}, [1 2], {'First','Expert'}, ...
         'paired',1,'newfig',0,'showpoints',1);
     set(gca,'Box','off','FontSize',FS);
     yline(0,'k:','LineWidth',LWthin);
@@ -274,7 +294,7 @@ if ~isempty(Tr) && height(Tr)>0
 
     sgtitle(sprintf('B2 %s | %s | window=%s', tag, mk, winSel), 'Interpreter','none','FontWeight','bold');
     saveas(f3, fullfile(outRoot, sprintf('%s_%s_B2_first_vs_expert_%s.png', tag, mk, winSel)));
-    close(f3);
+%     close(f3);
 end
 
 % ---------------- B3 (speed across blocks) ----------------
@@ -289,7 +309,7 @@ if ~isempty(Tr) && height(Tr)>0
         slope(b)  = early_slope(Tb, blockIdxMap, 5);
     end
 
-    f4 = figure('Color','w','Position',[50 50 650 520], 'visible', 'off');
+    f4 = figure('Color','w','Position',[50 50 650 520], 'visible', 'on');
 
     ax = subplot(1,2,1);
     hold(ax,'on'); set(ax,'Box','off','FontSize',FS);
@@ -310,7 +330,7 @@ if ~isempty(Tr) && height(Tr)>0
 
     sgtitle(sprintf('B3 %s | %s | window=%s', tag, mk, winSel), 'Interpreter','none','FontWeight','bold');
     saveas(f4, fullfile(outRoot, sprintf('%s_%s_B3_block_speed_%s.png', tag, mk, winSel)));
-    close(f4);
+%     close(f4);
 end
 
 % ---------------- B4 (classic vs operand) ----------------
@@ -388,7 +408,7 @@ ylabel('meanDiff'); grid on
 sgtitle(sprintf('B4 Mochi | %s | window=%s | classic vs operant (matched)', mk, winSel), ...
     'Interpreter','none','FontWeight','bold');
 saveas(f5, fullfile(outRoot, sprintf('Mochi_%s_B4_motor_condition_matched_%s.png', mk, winSel)));
-close(f5);
+% close(f5);
 
 end
 
@@ -651,6 +671,25 @@ use = idx(end-k+1:end);
 expertNames = nm(use);
 expertVal = mean(y(use), 'omitnan');
 end
+
+function [firstVals, expertVals] = first_n_vs_last_n(T, blockIdxMap, metricName, K)
+y = T.(metricName);
+x = get_block_x(T, blockIdxMap);
+[~,ord] = sort(x);
+y = y(ord);
+idx = find(isfinite(y));
+if isempty(idx)
+    firstVals = NaN;
+    expertVals = NaN;
+    return
+end
+k = min(K, numel(idx));
+firstUse = idx(1:k);
+expertUse = idx(end-k+1:end);
+firstVals = y(firstUse);
+expertVals = y(expertUse);
+end
+
 
 function n = sessions_to_threshold(T, blockIdxMap, thr)
 y = T.AUROC;
