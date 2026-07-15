@@ -12,10 +12,10 @@ Paris, France
 
 %% Settings: Select sessions
 project = 'RA'; % 'RP' 'Tonotopy'
-mode = 'training';     % 'training' or 'experiment'
+mode = 'experiment';     % 'training' or 'experiment'
 
 % Form the list of sessions
-selection = 2;
+selection = 16;
 
 % Tvorozhok training
 Dir{1} = PathForExperimentsReactActive({'Tvorozhok'}, 'training', 'none', '11_10');
@@ -47,6 +47,8 @@ Dir{16} = PathForExperimentsReactActive({'Mochi'}, 'experiment', 'none', 'all');
 % Mix experiment
 Dir{17} = PathForExperimentsReactActive({'Mochi', 'Tvorozhok'}, 'experiment', 'none', 'all');
 
+% Droujba training
+Dir{18} = PathForExperimentsReactActive('Droujba', 'training', 'none', 'all');
 
 sessions = Dir{selection}.path';
 
@@ -129,11 +131,11 @@ opts.video_gap_s = 1.0;      % split camera trains (seconds)
 Master_SleepScoring_preproc(sessions)
 
 %% Move DLC videos 
-to_dir = 'Z:\Arsenii\React_Active\experiment\Processed_data\Tvorozhok\'; 
+to_dir = 'Z:\Arsenii\React_Active\training\Droujba'; 
 % to_dir = 'Z:\Arsenii\React_Active\training\Mochi\'; 
 % to_dir = 'Z:\Arsenii\'; 
 
-from_dir = 'E:\DLC';
+from_dir = 'E:\DLC\face_tracking_model\videos\Droujba';
 copy_dlc_related_files(to_dir, from_dir)
 
 % check if you have '_filtered.csv' everywhere
